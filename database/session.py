@@ -43,18 +43,14 @@ class DatabaseSession:
     
     def create_tables(self):
         """Create all database tables."""
-        from sqlalchemy.ext.declarative import declarative_base
-        from database.models import User, Theme, Question, Game, GamePlayer, Round, RoundQuestion, Answer, Pool, PoolPlayer, GameVote, GameUsedQuestion, UserQuestionsHistory
+        from database.models import Base
         # Create tables from all models
-        Base = declarative_base()
         Base.metadata.create_all(bind=self.engine)
     
     def drop_tables(self):
         """Drop all database tables."""
-        from sqlalchemy.ext.declarative import declarative_base
-        from database.models import User, Theme, Question, Game, GamePlayer, Round, RoundQuestion, Answer, Pool, PoolPlayer, GameVote, GameUsedQuestion, UserQuestionsHistory
+        from database.models import Base
         # Drop tables from all models
-        Base = declarative_base()
         Base.metadata.drop_all(bind=self.engine)
 
 
