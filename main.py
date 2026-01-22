@@ -273,11 +273,95 @@ async def handle_answer(update: Update, context, data: str) -> None:
 
 async def handle_training_difficulty(update: Update, context, data: str) -> None:
     """Handle training difficulty selection."""
-    # TODO: Implement training game start
-    difficulty = data.split(":")[1]
-    await update.callback_query.message.reply_text(
-        f"Тренировка со сложностью {difficulty} будет запущена..."
-    )
+    from database.session import db_session
+    from database.queries import UserQueries, GameQueries
+    from database.models import GamePlayer
+    from tasks.game_tasks import start_game_task
+    
+    query = update.callback_query
+    user = update.effective_user
+    
+    # Parse difficulty
+    try:
+        difficulty = data.split(":")[1]
+    except IndexError:
+        await query.answer("Ошибка: неверный формат данных", show_alert=True)
+        return
+    
+    difficulty_names = {
+        'novice': 'Новичок',
+        'amateur': 'Любитель',
+        'expert': 'Эксперт'
+    }
+    difficulty_name = difficulty_names.get(difficulty, difficulty)
+    
+    try:
+        with db_session() as session:
+            # Get or create user
+            db_user = UserQueries.get_or_create_user(
+                session,
+                telegram_id=user.id,
+                username=user.username,
+                full_name=f"{user.first_name} {user.last_name or ''}".strip()
+            )
+            
+            # Create game
+            game = GameQueries.create_game(
+                session,
+                game_type='training',
+                creator_id=db_user.id,
+                total_rounds=10
+            )
+            
+            # Add user
+            game_player = GamePlayer(
+                game_id=game.id,
+                user_id=db_user.id,
+                is_bot=False,
+                join_order=1
+            )
+            session.add(game_player)
+            
+            # Add bots (9 bots needed for 10 total players)
+            bots_needed = 9
+            bots = UserQueries.get_bots(session, limit=bots_needed)
+            
+            if len(bots) < bots_needed:
+                await query.message.reply_text(
+                    f"⚠️ Доступно только {len(bots)} ботов, нужно {bots_needed}.\n"
+                    f"Игра будет создана с {len(bots) + 1} игроками."
+                )
+            
+            for i, bot in enumerate(bots, 2):
+                bot_player = GamePlayer(
+                    game_id=game.id,
+                    user_id=bot.id,
+                    is_bot=True,
+                    bot_difficulty=bot.bot_difficulty,
+                    join_order=i
+                )
+                session.add(bot_player)
+            
+            session.commit()
+            
+            logger.info(f"Created training game {game.id} with {len(bots) + 1} players")
+            
+            # Start game asynchronously
+            start_game_task.delay(game.id)
+            
+            await query.message.reply_text(
+                f"✅ Игра создана!\n\n"
+                f"🎮 Игра #{game.id}\n"
+                f"🤖 Сложность ботов: {difficulty_name}\n"
+                f"👥 Игроков: {len(bots) + 1}\n\n"
+                f"Игра начинается..."
+            )
+            
+    except Exception as e:
+        logger.error(f"Error creating training game: {e}", exc_info=True)
+        await query.message.reply_text(
+            "❌ Произошла ошибка при создании игры. Попробуйте позже."
+        )
 
 
 async def handle_admin(update: Update, context, data: str) -> None:
