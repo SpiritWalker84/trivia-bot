@@ -48,7 +48,7 @@ class Config:
     MAX_QUESTIONS_IN_DB: int = int(os.getenv("MAX_QUESTIONS_IN_DB", "50000"))
     POOL_CHECK_INTERVAL: int = int(os.getenv("POOL_CHECK_INTERVAL", "300"))  # 5 minutes
     VOTE_DURATION: int = int(os.getenv("VOTE_DURATION", "45"))  # seconds
-    QUESTION_TIME_LIMIT: int = int(os.getenv("QUESTION_TIME_LIMIT", "20"))  # seconds
+    QUESTION_TIME_LIMIT: int = int(os.getenv("QUESTION_TIME_LIMIT", "10"))  # seconds
     TIE_BREAK_TIME_LIMIT: int = int(os.getenv("TIE_BREAK_TIME_LIMIT", "20"))  # seconds
     
     # Game Settings

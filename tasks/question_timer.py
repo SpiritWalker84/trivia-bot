@@ -118,14 +118,29 @@ def update_question_timer(
         progress_bar = "▓" * filled_bars + "░" * empty_bars
         
         question_text += f"\n⏱️ {remaining} сек [{progress_bar}]"
+        
+        # Rebuild keyboard to keep buttons
+        from bot.keyboards import QuestionAnswerKeyboard
+        options = {}
+        if question.option_a:
+            options['A'] = question.option_a
+        if question.option_b:
+            options['B'] = question.option_b
+        if question.option_c:
+            options['C'] = question.option_c
+        if question.option_d:
+            options['D'] = question.option_d
+        
+        keyboard = QuestionAnswerKeyboard.get_keyboard(round_question_id, options)
     
-    # Update message
+    # Update message with keyboard preserved
     try:
         bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
         bot.edit_message_text(
             chat_id=user_id,
             message_id=message_id,
-            text=question_text
+            text=question_text,
+            reply_markup=keyboard
         )
     except Exception as e:
         # Message might be already edited or deleted, ignore
