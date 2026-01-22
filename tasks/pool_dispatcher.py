@@ -78,7 +78,7 @@ def start_game_from_pool(pool_id: int, player_ids: List[int]) -> None:
     from datetime import datetime
     import pytz
     from game.engine import GameEngine
-    from database.models import GamePlayer, PoolPlayer
+    from database.models import GamePlayer, PoolPlayer, Pool
     
     with db_session() as session:
         # Check active games limit
