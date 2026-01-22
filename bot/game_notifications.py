@@ -75,7 +75,13 @@ class GameNotifications:
                 options_text += f"D) {question.option_d}\n"
             
             question_text += options_text
-            question_text += f"\n⏱️ Осталось: {self.config.QUESTION_TIME_LIMIT} сек"
+            
+            # Visual progress bar for timer
+            time_limit = self.config.QUESTION_TIME_LIMIT
+            total_bars = 20
+            filled_bars = total_bars  # Start with full bar
+            progress_bar = "▓" * filled_bars
+            question_text += f"\n⏱️ {time_limit} сек [{progress_bar}]"
             
             # Create keyboard
             keyboard = QuestionAnswerKeyboard.get_keyboard(

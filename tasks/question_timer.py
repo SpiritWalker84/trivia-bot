@@ -34,7 +34,7 @@ def start_question_timer(
     """
     # Schedule first update immediately
     update_question_timer.apply_async(
-        args=[game_id, round_id, round_question_id, user_id, message_id, time_limit],
+        args=[game_id, round_id, round_question_id, user_id, message_id, time_limit, time_limit],
         countdown=0
     )
 
@@ -46,7 +46,8 @@ def update_question_timer(
     round_question_id: int,
     user_id: int,
     message_id: int,
-    remaining: int
+    remaining: int,
+    time_limit: int
 ) -> None:
     """
     Update question message with countdown timer.
@@ -110,7 +111,13 @@ def update_question_timer(
         if question.option_d:
             question_text += f"D) {question.option_d}\n"
         
-        question_text += f"\n⏱️ Осталось: {remaining} сек"
+        # Visual progress bar
+        total_bars = 20
+        filled_bars = int((remaining / time_limit) * total_bars) if time_limit > 0 else 0
+        empty_bars = total_bars - filled_bars
+        progress_bar = "▓" * filled_bars + "░" * empty_bars
+        
+        question_text += f"\n⏱️ {remaining} сек [{progress_bar}]"
     
     # Update message
     try:
@@ -128,6 +135,6 @@ def update_question_timer(
     # Schedule next update if time remaining
     if remaining > 1:
         update_question_timer.apply_async(
-            args=[game_id, round_id, round_question_id, user_id, message_id, remaining - 1],
+            args=[game_id, round_id, round_question_id, user_id, message_id, remaining - 1, time_limit],
             countdown=1
         )
