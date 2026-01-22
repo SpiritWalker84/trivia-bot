@@ -118,7 +118,6 @@ class Question(Base, TimestampMixin):
     theme = relationship("Theme", back_populates="questions")
     creator = relationship("User", foreign_keys=[created_by])
     round_questions = relationship("RoundQuestion", back_populates="question")
-    answers = relationship("Answer", back_populates="question")
     game_used = relationship("GameUsedQuestion", back_populates="question")
     user_history = relationship("UserQuestionsHistory", back_populates="question")
     
@@ -288,7 +287,6 @@ class Answer(Base):
     round_question = relationship("RoundQuestion", back_populates="answers")
     user = relationship("User", back_populates="answers")
     game_player = relationship("GamePlayer", back_populates="answers")
-    question = relationship("Question", back_populates="answers")
     
     __table_args__ = (
         Index("idx_answers_unique", "round_question_id", "user_id", unique=True),
