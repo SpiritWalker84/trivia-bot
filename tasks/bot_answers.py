@@ -96,12 +96,16 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
             )
             
             # Calculate answer time (with delay)
+            from decimal import Decimal
             if round_question.displayed_at:
                 answer_time = (datetime.now(pytz.UTC) - round_question.displayed_at).total_seconds()
                 # Add bot delay
                 answer_time += bot_answer['delay_seconds']
             else:
                 answer_time = bot_answer['delay_seconds']
+            
+            # Convert to Decimal for database compatibility
+            answer_time_decimal = Decimal(str(answer_time))
             
             # Save answer
             answer = Answer(
@@ -112,7 +116,7 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
                 game_player_id=game_player.id,
                 selected_option=bot_answer['selected_option'],
                 is_correct=bot_answer['is_correct'],
-                answer_time=answer_time,
+                answer_time=answer_time_decimal,
                 answered_at=datetime.now(pytz.UTC)
             )
             session.add(answer)
@@ -120,7 +124,7 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
             # Update game player stats
             if bot_answer['is_correct']:
                 game_player.total_score += 1
-            game_player.total_time += answer_time
+            game_player.total_time += answer_time_decimal
         
         session.commit()
         

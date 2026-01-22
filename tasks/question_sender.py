@@ -105,6 +105,8 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
             
             if not existing_answer:
                 # No answer - mark as incorrect
+                from decimal import Decimal
+                max_time = Decimal(str(config.config.QUESTION_TIME_LIMIT))
                 answer = Answer(
                     game_id=game_id,
                     round_id=round_id,
@@ -113,11 +115,11 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
                     game_player_id=game_player.id,
                     selected_option=None,
                     is_correct=False,
-                    answer_time=config.config.QUESTION_TIME_LIMIT,  # Max time
+                    answer_time=max_time,  # Max time
                     answered_at=datetime.now(pytz.UTC)
                 )
                 session.add(answer)
-                game_player.total_time += config.config.QUESTION_TIME_LIMIT
+                game_player.total_time += max_time
         
         session.commit()
         

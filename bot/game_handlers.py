@@ -82,10 +82,14 @@ async def handle_answer(
             return
         
         # Calculate answer time
+        from decimal import Decimal
         if round_question.displayed_at:
             answer_time = (datetime.now(pytz.UTC) - round_question.displayed_at).total_seconds()
         else:
             answer_time = 0.0
+        
+        # Convert to Decimal for database compatibility
+        answer_time_decimal = Decimal(str(answer_time))
         
         # Check if answer is correct
         is_correct = (selected_option.upper() == question.correct_option.upper())
@@ -114,7 +118,7 @@ async def handle_answer(
             game_player_id=game_player.id,
             selected_option=selected_option.upper(),
             is_correct=is_correct,
-            answer_time=answer_time,
+            answer_time=answer_time_decimal,
             answered_at=datetime.now(pytz.UTC)
         )
         session.add(answer)
@@ -122,7 +126,7 @@ async def handle_answer(
         # Update game player stats
         if is_correct:
             game_player.total_score += 1
-        game_player.total_time += answer_time
+        game_player.total_time += answer_time_decimal
         
         session.flush()
         

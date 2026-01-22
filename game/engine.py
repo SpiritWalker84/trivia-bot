@@ -123,8 +123,12 @@ class GameEngine:
                 - 'game_finished': bool - whether game should be finished
         """
         from database.models import Answer as AnswerModel
+        from decimal import Decimal
         
         with db_session() as session:
+            # Convert answer_time to Decimal for database compatibility
+            answer_time_decimal = Decimal(str(answer_time))
+            
             # Save answer
             answer = AnswerModel(
                 game_id=game_id,
@@ -133,7 +137,7 @@ class GameEngine:
                 user_id=user_id,
                 selected_option=selected_option,
                 is_correct=is_correct,
-                answer_time=answer_time,
+                answer_time=answer_time_decimal,
                 answered_at=datetime.now(pytz.UTC)
             )
             session.add(answer)
@@ -147,7 +151,7 @@ class GameEngine:
             if game_player:
                 if is_correct:
                     game_player.total_score += 1
-                game_player.total_time += answer_time
+                game_player.total_time += answer_time_decimal
             
             session.flush()
             
