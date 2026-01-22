@@ -31,7 +31,6 @@ async def start_command(update: Update, context) -> None:
             username=user.username,
             full_name=f"{user.first_name} {user.last_name or ''}".strip()
         )
-        session.commit()
     
     welcome_text = (
         "🎮 Добро пожаловать в Brain Survivor!\n\n"
@@ -102,9 +101,7 @@ async def handle_quick_game(update: Update, context) -> None:
         # Add player to pool
         try:
             PoolQueries.add_player_to_pool(session, pool.id, user_id)
-            session.commit()
         except Exception as e:
-            session.rollback()
             logger.error(f"Error adding player to pool: {e}")
             await update.message.reply_text(
                 "Произошла ошибка. Попробуйте позже.",

@@ -75,4 +75,5 @@ def get_db_session() -> DatabaseSession:
 def db_session() -> Generator[Session, None, None]:
     """Context manager for database session."""
     db = get_db_session()
-    yield from db.get_session()
+    with db.get_session() as session:
+        yield session
