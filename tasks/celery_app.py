@@ -30,6 +30,7 @@ def create_celery_app() -> Celery:
         task_soft_time_limit=25 * 60,  # 25 minutes
         worker_prefetch_multiplier=1,
         worker_max_tasks_per_child=50,
+        broker_connection_retry_on_startup=True,  # Retry broker connection on startup
     )
     
     return celery_app
