@@ -116,6 +116,24 @@ def finish_round_task(game_id: int, round_number: int) -> None:
                 finish_game_task.delay(game_id)
     else:
         logger.warning(f"Game {game_id} round {round_number}: No player eliminated")
+        # Even if no elimination, check if game should continue
+        with db_session() as session:
+            game = session.query(Game).filter(Game.id == game_id).first()
+            if not game:
+                return
+            
+            alive_count = len([gp for gp in game.players if not gp.is_eliminated])
+            
+            if alive_count <= 1:
+                # Game finished
+                finish_game_task.delay(game_id)
+            elif round_number < config.config.ROUNDS_PER_GAME:
+                # Continue to next round
+                logger.info(f"Game {game_id}: Continuing to round {round_number + 1}")
+                start_next_round_task.delay(game_id, round_number + 1)
+            else:
+                # Last round finished
+                finish_game_task.delay(game_id)
 
 
 @celery_app.task(name="tasks.game_tasks.start_next_round_task")

@@ -15,6 +15,9 @@ def create_celery_app() -> Celery:
             "tasks.pool_dispatcher",
             "tasks.vote_dispatcher",
             "tasks.game_tasks",
+            "tasks.question_sender",
+            "tasks.bot_answers",
+            "tasks.question_timer",
         ]
     )
     

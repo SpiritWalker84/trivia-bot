@@ -8,6 +8,7 @@ from tasks.vote_dispatcher import process_game_vote
 from tasks.game_tasks import start_game_task, finish_round_task, finish_game_task, start_next_round_task
 from tasks.question_sender import send_question_to_players, collect_answers
 from tasks.bot_answers import process_bot_answers, send_next_question
+from tasks.question_timer import start_question_timer, update_question_timer
 
 __all__ = [
     "celery_app",
@@ -23,4 +24,6 @@ __all__ = [
     "collect_answers",
     "process_bot_answers",
     "send_next_question",
+    "start_question_timer",
+    "update_question_timer",
 ]

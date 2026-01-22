@@ -1,0 +1,133 @@
+"""
+Question timer - updates question message with countdown timer.
+"""
+from celery import Task
+from tasks.celery_app import celery_app
+from utils.logging import get_logger
+from telegram import Bot
+import config
+
+logger = get_logger(__name__)
+
+
+@celery_app.task(name="tasks.question_timer.start_question_timer", bind=True)
+def start_question_timer(
+    self: Task,
+    game_id: int,
+    round_id: int,
+    round_question_id: int,
+    user_id: int,
+    message_id: int,
+    time_limit: int
+) -> None:
+    """
+    Start countdown timer for question.
+    Schedules updates every second using countdown.
+    
+    Args:
+        game_id: Game ID
+        round_id: Round ID
+        round_question_id: Round question ID
+        user_id: User Telegram ID
+        message_id: Message ID to update
+        time_limit: Time limit in seconds
+    """
+    # Schedule first update immediately
+    update_question_timer.apply_async(
+        args=[game_id, round_id, round_question_id, user_id, message_id, time_limit],
+        countdown=0
+    )
+
+
+@celery_app.task(name="tasks.question_timer.update_question_timer")
+def update_question_timer(
+    game_id: int,
+    round_id: int,
+    round_question_id: int,
+    user_id: int,
+    message_id: int,
+    remaining: int
+) -> None:
+    """
+    Update question message with countdown timer.
+    
+    Args:
+        game_id: Game ID
+        round_id: Round ID
+        round_question_id: Round question ID
+        user_id: User Telegram ID
+        message_id: Message ID to update
+        remaining: Remaining seconds
+    """
+    from database.session import db_session
+    from database.models import RoundQuestion, Answer, Round, Question, Theme
+    
+    # Check if user already answered (stop timer if answered)
+    with db_session() as session:
+        existing_answer = session.query(Answer).filter(
+            Answer.round_question_id == round_question_id,
+            Answer.user_id == user_id
+        ).first()
+        
+        if existing_answer:
+            # User answered, stop timer
+            logger.debug(f"User {user_id} answered, stopping timer")
+            return
+        
+        # Get question data
+        rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question_id).first()
+        if not rq:
+            return
+        
+        question = session.query(Question).filter(Question.id == rq.question_id).first()
+        if not question:
+            return
+        
+        round_obj = session.query(Round).filter(Round.id == round_id).first()
+        if not round_obj:
+            return
+        
+        # Rebuild question text
+        theme_text = ""
+        if round_obj.theme_id:
+            theme = session.query(Theme).filter(Theme.id == round_obj.theme_id).first()
+            if theme:
+                theme_text = f" | Тема: {theme.name}"
+        
+        question_text = (
+            f"🏁 Раунд {round_obj.round_number}/{config.config.ROUNDS_PER_GAME}{theme_text}\n"
+            f"Вопрос {rq.question_number}/{config.config.QUESTIONS_PER_ROUND}:\n\n"
+            f"❓ {question.question_text}\n\n"
+        )
+        
+        # Build options
+        if question.option_a:
+            question_text += f"A) {question.option_a}\n"
+        if question.option_b:
+            question_text += f"B) {question.option_b}\n"
+        if question.option_c:
+            question_text += f"C) {question.option_c}\n"
+        if question.option_d:
+            question_text += f"D) {question.option_d}\n"
+        
+        question_text += f"\n⏱️ Осталось: {remaining} сек"
+    
+    # Update message
+    try:
+        bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
+        bot.edit_message_text(
+            chat_id=user_id,
+            message_id=message_id,
+            text=question_text
+        )
+    except Exception as e:
+        # Message might be already edited or deleted, ignore
+        logger.debug(f"Could not update timer message: {e}")
+        return
+    
+    # Schedule next update if time remaining
+    if remaining > 1:
+        update_question_timer.apply_async(
+            args=[game_id, round_id, round_question_id, user_id, message_id, remaining - 1],
+            countdown=1
+        )

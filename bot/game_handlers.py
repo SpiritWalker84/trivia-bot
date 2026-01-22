@@ -133,11 +133,13 @@ async def handle_answer(
         session.commit()
         
         # Send feedback message immediately (callback already answered in main handler)
+        # Format time: show seconds with 1 decimal place
+        time_str = f"{float(answer_time_decimal):.1f}"
         try:
             if is_correct:
-                await query.message.reply_text("✅ Правильно!")
+                await query.message.reply_text(f"✅ Правильно! (вы ответили за {time_str} сек)")
             else:
-                await query.message.reply_text(f"❌ Неправильно. Правильный ответ: {question.correct_option}")
+                await query.message.reply_text(f"❌ Неправильно. Правильный ответ: {question.correct_option} (вы ответили за {time_str} сек)")
         except Exception as e:
             logger.error(f"Failed to send answer feedback: {e}")
         

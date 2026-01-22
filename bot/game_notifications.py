@@ -75,7 +75,7 @@ class GameNotifications:
                 options_text += f"D) {question.option_d}\n"
             
             question_text += options_text
-            question_text += f"\n⏱️ {self.config.QUESTION_TIME_LIMIT} секунд"
+            question_text += f"\n⏱️ Осталось: {self.config.QUESTION_TIME_LIMIT} сек"
             
             # Create keyboard
             keyboard = QuestionAnswerKeyboard.get_keyboard(
@@ -84,7 +84,7 @@ class GameNotifications:
             )
             
             # Send message
-            await self.bot.send_message(
+            message = await self.bot.send_message(
                 chat_id=user_id,
                 text=question_text,
                 reply_markup=keyboard
@@ -98,6 +98,17 @@ class GameNotifications:
                 if round_question_obj:
                     round_question_obj.displayed_at = datetime.now(pytz.UTC)
                     session.commit()
+            
+            # Start countdown timer (update message every second)
+            from tasks.question_timer import start_question_timer
+            start_question_timer.delay(
+                game_id=game_id,
+                round_id=round_id,
+                round_question_id=round_question.id,
+                user_id=user_id,
+                message_id=message.message_id,
+                time_limit=self.config.QUESTION_TIME_LIMIT
+            )
             
             return True
             
