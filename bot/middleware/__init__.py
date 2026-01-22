@@ -1,0 +1,3 @@
+"""
+Bot middleware module.
+"""

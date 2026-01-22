@@ -1,0 +1,847 @@
+ТЗ: Telegram-бот «Brain Survivor» (викторина на выбывание)
+## 🎯 Суть игры
+10 участников играют 10 раундов по 10 вопросов. После каждого раунда выбывает 1 игрок с наименьшим количеством правильных ответов. При равенстве очков выбывает тот, у кого больше суммарное время на ответы (медленнее). Финал: битва двух финалистов в 10 раундах.
+---
+## 🎮 Режимы игры
+-- 1. 🏃 БЫСТРАЯ ИГРА (основной режим)
+Игрок встаёт в общую очередь.
+Каждые 5 минут система проверяет пул.
+Если 10+ человек → игра стартует автоматически.
+Если 3-9 человек → запускается голосование на 45 секунд:
+`▶️ НАЧАТЬ СЕЙЧАС` (добить до 10 умными ботами)
+⏳ ЖДАТЬ ЕЩЁ 5 МИНУТ
+Правило: Если ВСЕ проголосовали «ЖДАТЬ» → ждём ещё 5 мин. В любом другом случае (хотя бы один «НАЧАТЬ» или неответ) → старт с ботами.
+Неответ в течение 45 сек = автоматическое согласие на старт с ботами.
+Если 1-2 человека → автоматическое предложение перейти в режим «Тренировка».
+-- 2. 🤖 ТРЕНИРОВКА (против ботов)
+Мгновенный старт.
+1 живой игрок + 9 ботов.
+Настройка сложности ботов: Новичок, Любитель, Эксперт.
+-- 3. 👥 ПРИВАТНАЯ ИГРА (с друзьями)
+Создатель настраивает:
+1.
+Тему.
+2.
+Общее количество участников (2-10).
+3.
+Количество ботов (можно 0).
+Пример: «8 участников, из них 3 ботами» → нужно 5 друзей.
+Старт только при присоединении всех указанных живых игроков.
+---
+## ⚙️ Ключевые механизмы
+-- Выбывание при равенстве очков
+Фиксируется время от показа вопроса до отправки ответа для каждого игрока.
+При равном количестве правильных ответов выбывает игрок с большей суммой времени на все ответы в раунде.
+-- Боты (умные)
+Заполняют недостающие слоты.
+Не отличимы в интерфейсе от живых игроков во время игры (тайно помечаются только в статистике).
+Отвечают с рандомной задержкой 3-15 секунд.
+Уровень сложности влияет на вероятность правильного ответа.
+-- База вопросов
+Источники: Парсинг открытых баз + генерация через ИИ (масштабируемо) + пользовательский вклад (с модерацией).
+Темы: Кино, Наука, Спорт, Музыка, География, Общее и др.
+Важно: тысячи вопросов для минимизации повторов.
+---
+## 📱 Прототип интерфейса
+-- Главное меню
+🎮 Brain Survivor
+🏃
+БЫСТРАЯ ИГРА
+• Очередь 5 мин → голосование → старт
+🤖
+ТРЕНИРОВКА
+• Мгновенно против 9 ботов
+👥
+ПРИВАТНАЯ ИГРА
+• С друзьями + гибкая настройка ботов
+📊
+РЕЙТИНГ
+📖
+ПРАВИЛА
+-- Ход раунда (пример в ЛС)
+🏁 Раунд 3/10 | Тема: Кино
+Вопрос 7/10:
+«Какой актер сыграл Тони Старка в MCU?»
+A) Крис Эванс
+B) Роберт Дауни-младший
+C) Крис Хемсворт
+D) Марк Руффало
+⏱️ 20 секунд
+(Ответ через inline-кнопки или текстом)
+-- Итоги раунда с выбыванием
+📊 ИТОГИ РАУНДА 3/10
+1. Алексей...... 9/10 (102.5с)
+...
+9. Дмитрий...... 2/10 (179.1с)
+10. Bot_Gamma... 2/10 (185.6с)
+⚠️ Равенство очков!
+⏱️ Bot_Gamma отвечал медленнее.
+🚫 Выбывает: Bot_Gamma
+---
+## 🛠 Технические требования
+1.
+Состояния игрока: меню → в пуле → голосование → в игре → ожидание итогов → выбыл/победил.
+2.
+Таймеры: Критичны. Использовать очередь задач (Celery, RabbitMQ).
+3.
+БД для игры: game_id, theme, players: [user_id, score, total_time, is_bot], current_round, asked_questions.
+4.
+Обработка голосования: Inline-кнопки, callback_query, фиксация ответов, таймер 45 сек с визуализацией.
+5.
+Модуль ботов: Принимает вопрос, варианты, уровень сложности → возвращает ответ и задержку.
+Ниже — вариант структуры БД под твой функционал. Ориентир: PostgreSQL, нормализация без фанатизма, чтобы удобно было и играть, и расширять.
+---
+## 1. Общие принципы
+- Все ID — BIGSERIAL или UUID (ниже пишу BIGSERIAL для простоты).
+- Времена в UTC, TIMESTAMPTZ.
+- Статусы — через ENUM или VARCHAR + константы в коде (я укажу варианты).
+- Боты и люди хранятся в одной таблице users, у ботов is_bot = true.
+---
+## 2. Таблица users
+Хранит всех игроков, в т.ч. ботов.
+CREATE TABLE users (
+id
+BIGSERIAL PRIMARY KEY,
+telegram_id
+BIGINT UNIQUE,
+-- NULL для ботов
+username
+VARCHAR(255),
+full_name
+VARCHAR(255),
+is_bot
+BOOLEAN NOT NULL DEFAULT FALSE,
+bot_difficulty
+VARCHAR(20),
+-- NULL для живых, 'novice'/'amateur'/'expert' для ботов
+rating
+INTEGER NOT NULL DEFAULT 0,
+games_played
+INTEGER NOT NULL DEFAULT 0,
+games_won
+INTEGER NOT NULL DEFAULT 0,
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+updated_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+Индексы:
+CREATE INDEX idx_users_telegram_id ON users (telegram_id);
+CREATE INDEX idx_users_is_bot ON users (is_bot);
+Примечания:
+- Ботов можно предзаполнить или создавать динамически.
+- bot_difficulty можно не хранить в users, а задавать на уровне игры, но удобно иметь и тут
+для “персональности”.
+---
+## 3. Таблица themes
+Темы вопросов (Кино, Наука и т.п.).
+CREATE TABLE themes (
+id
+BIGSERIAL PRIMARY KEY,
+code
+VARCHAR(50) UNIQUE NOT NULL,
+-- 'movies', 'science'
+name
+VARCHAR(100) NOT NULL,
+-- "Кино"
+description TEXT
+);
+---
+## 4. Таблица questions
+База вопросов.
+CREATE TABLE questions (
+id
+BIGSERIAL PRIMARY KEY,
+theme_id
+BIGINT NOT NULL REFERENCES themes(id) ON DELETE RESTRICT,
+question_text
+TEXT NOT NULL,
+option_a
+TEXT NOT NULL,
+option_b
+TEXT NOT NULL,
+option_c
+TEXT,
+option_d
+TEXT,
+correct_option
+CHAR(1) NOT NULL,
+-- 'A','B','C','D'
+difficulty
+VARCHAR(20),
+-- 'easy', 'medium', 'hard' (опционально)
+source_type
+VARCHAR(20) NOT NULL,
+-- 'parsed', 'ai', 'user'
+created_by
+BIGINT REFERENCES users(id),-- NULL для импортированных/AI
+is_approved
+BOOLEAN NOT NULL DEFAULT TRUE, -- модерация пользовательских
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+Индексы:
+CREATE INDEX idx_questions_theme ON questions (theme_id);
+CREATE INDEX idx_questions_theme_diff ON questions (theme_id, difficulty);
+CREATE INDEX idx_questions_source ON questions (source_type);
+---
+## 5. Таблица user_questions_history (опционально, для минимизации повторов)
+Если хочешь контролировать повторы для каждого пользователя:
+CREATE TABLE user_questions_history (
+user_id
+BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+question_id BIGINT NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+PRIMARY KEY (user_id, question_id)
+);
+---
+## 6. Таблица games
+Описывает одну “сессию” игры (быстрая, тренировка или приватная).
+CREATE TABLE games (
+id
+BIGSERIAL PRIMARY KEY,
+game_type
+VARCHAR(20) NOT NULL,
+-- 'quick', 'training', 'private'
+creator_id
+BIGINT REFERENCES users(id),
+theme_id
+BIGINT REFERENCES themes(id),
+-- NULL если "смешанные темы"
+status
+VARCHAR(20) NOT NULL,
+-- 'waiting', 'in_progress', 'finished', 'cancelled'
+total_rounds
+INTEGER NOT NULL DEFAULT 10, -- 10 раундов по умолчанию
+is_final_stage
+BOOLEAN NOT NULL DEFAULT FALSE, -- финальная дуэль 1х1
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+started_at
+TIMESTAMPTZ,
+finished_at
+TIMESTAMPTZ
+);
+Индексы:
+CREATE INDEX idx_games_type_status ON games (game_type, status);
+CREATE INDEX idx_games_status ON games (status);
+Ниже — пункты с 7 по 14 в виде одного копируемого SQL-блока. Типы статусов/типов игр/голосов (`VARCHAR`) можно потом заменить на ENUM по вкусу.
+```sql
+-- 7. games — игры (сессии)
+CREATE TABLE games (
+id
+BIGSERIAL PRIMARY KEY,
+game_type
+VARCHAR(20) NOT NULL,
+-- 'quick', 'training', 'private'
+creator_id
+BIGINT REFERENCES users(id),
+theme_id
+BIGINT REFERENCES themes(id),
+-- NULL, если "смешанные темы"
+status
+VARCHAR(20) NOT NULL,
+-- 'waiting', 'pre_start', 'in_progress', 'finished', 'cancelled'
+total_rounds
+INTEGER NOT NULL DEFAULT 10,
+is_final_stage
+BOOLEAN NOT NULL DEFAULT FALSE,
+current_round
+INTEGER,
+-- можно держать текущий раунд здесь
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+started_at
+TIMESTAMPTZ,
+finished_at
+TIMESTAMPTZ
+);
+CREATE INDEX idx_games_type_status ON games (game_type, status);
+CREATE INDEX idx_games_status ON games (status);
+-- 8. game_players — участники игры и их агрегаты
+CREATE TABLE game_players (
+id
+BIGSERIAL PRIMARY KEY,
+game_id
+BIGINT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+user_id
+BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+is_bot
+BOOLEAN NOT NULL DEFAULT FALSE,
+bot_difficulty
+VARCHAR(20),
+-- 'novice','amateur','expert' для конкретной игры
+join_order
+INTEGER NOT NULL,
+-- порядок присоединения
+total_score
+INTEGER NOT NULL DEFAULT 0, -- все правильные ответы за игру
+total_time
+NUMERIC(10,3) NOT NULL DEFAULT 0, -- суммарное время ответов
+is_eliminated
+BOOLEAN NOT NULL DEFAULT FALSE,
+eliminated_round INTEGER,
+-- номер раунда, где выбыл
+final_place
+INTEGER,
+-- итоговое место (1..N)
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX idx_game_players_unique
+ON game_players (game_id, user_id);
+CREATE INDEX idx_game_players_game
+ON game_players (game_id);
+-- 9. rounds — раунды в рамках игры
+CREATE TABLE rounds (
+id
+BIGSERIAL PRIMARY KEY,
+game_id
+BIGINT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+round_number
+INTEGER NOT NULL,
+-- 1..10
+theme_id
+BIGINT REFERENCES themes(id), -- тема раунда, можно NULL
+status
+VARCHAR(20) NOT NULL,
+-- 'not_started', 'in_progress', 'finished'
+started_at
+TIMESTAMPTZ,
+finished_at
+TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX idx_rounds_game_round
+ON rounds (game_id, round_number);
+-- 10. round_questions — вопросы внутри раунда
+CREATE TABLE round_questions (
+id
+BIGSERIAL PRIMARY KEY,
+round_id
+BIGINT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+question_id
+BIGINT NOT NULL REFERENCES questions(id) ON DELETE RESTRICT,
+question_number INTEGER NOT NULL,
+-- 1..10
+displayed_at
+TIMESTAMPTZ,
+-- когда показали вопрос
+time_limit_sec
+INTEGER NOT NULL DEFAULT 20
+);
+CREATE UNIQUE INDEX idx_round_questions_unique
+ON round_questions (round_id, question_number);
+CREATE INDEX idx_round_questions_round
+ON round_questions (round_id);
+-- 11. answers — ответы игроков
+CREATE TABLE answers (
+id
+BIGSERIAL PRIMARY KEY,
+game_id
+BIGINT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+round_id
+BIGINT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+round_question_id
+BIGINT NOT NULL REFERENCES round_questions(id) ON DELETE CASCADE,
+user_id
+BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+selected_option
+CHAR(1),
+-- 'A','B','C','D', NULL если не ответил
+is_correct
+BOOLEAN,
+answer_time
+NUMERIC(10,3),
+-- время ответа в секундах (от displayed_at)
+answered_at
+TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX idx_answers_unique
+ON answers (round_question_id, user_id);
+CREATE INDEX idx_answers_game_round_user
+ON answers (game_id, round_id, user_id);
+-- 12. pools — пулы (очереди) для быстрых игр
+CREATE TABLE pools (
+id
+BIGSERIAL PRIMARY KEY,
+pool_type
+VARCHAR(20) NOT NULL,
+-- 'quick_public' и т.п.
+status
+VARCHAR(20) NOT NULL,
+-- 'waiting', 'forming_game', 'closed'
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+last_check_at
+TIMESTAMPTZ
+);
+CREATE INDEX idx_pools_status
+ON pools (status);
+-- pool_players — участники пула
+CREATE TABLE pool_players (
+id
+BIGSERIAL PRIMARY KEY,
+pool_id
+BIGINT NOT NULL REFERENCES pools(id) ON DELETE CASCADE,
+user_id
+BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+joined_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX idx_pool_players_unique
+ON pool_players (pool_id, user_id);
+CREATE INDEX idx_pool_players_pool
+ON pool_players (pool_id);
+-- 13. game_votes — голосование "НАЧАТЬ СЕЙЧАС / ЖДАТЬ"
+CREATE TABLE game_votes (
+id
+BIGSERIAL PRIMARY KEY,
+game_id
+BIGINT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+user_id
+BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+vote
+VARCHAR(20) NOT NULL,
+-- 'start_now', 'wait_more'
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX idx_game_votes_unique
+ON game_votes (game_id, user_id);
+CREATE INDEX idx_game_votes_game
+ON game_votes (game_id);
+-- 14. game_used_questions — какие вопросы уже использованы в игре
+CREATE TABLE game_used_questions (
+game_id
+BIGINT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+question_id BIGINT NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+PRIMARY KEY (game_id, question_id)
+);
+```
+алгоритм диспетчера пула (каждые 5 минут, обработка голосования).
+Алгоритм лучше разделить на две части:
+1) диспетчер пула (каждые 5 минут);
+2) диспетчер голосования (45 секунд).
+Ниже — логика так, как её можно прямо переносить в код (Celery-задачи / cron + функции).
+---
+## 1. Диспетчер пула (каждые 5 минут)
+Вход: никакой, запускается периодически.
+Цель: посмотреть текущий активный пул «быстрой игры», решить, что делать с количеством людей.
+-- 1.1. Подготовка
+1. Найти активный пул для быстрых игр:
+pool = SELECT * FROM pools
+WHERE pool_type = 'quick_public'
+AND status = 'waiting'
+ORDER BY created_at ASC
+LIMIT 1
+2. Если pool == null → ничего не делаем, выходим.
+3. Обновить last_check_at:
+UPDATE pools SET last_check_at = now()
+WHERE id = pool.id
+4. Получить список игроков:
+players = SELECT user_id FROM pool_players
+WHERE pool_id = pool.id
+ORDER BY joined_at ASC
+5. N = players.count.
+---
+-- 1.2. Ветка A: N == 0
+- Ничего не делаем, просто ждём следующий запуск.
+---
+-- 1.3. Ветка B: N == 1 или N == 2
+- Этим людям нужно предложить режим “Тренировка” (1 живой + боты).
+- Для каждого такого пользователя отправляем сообщение в Telegram:
+for user in players:
+send_message(user,
+"Сейчас мало людей в очереди. Хочешь сыграть в тренировочном режиме против ботов?")
+show_buttons(["Да, тренировка", "Подождать ещё"])
+- Пользовательский ответ обрабатываем уже в хэндлере бота.
+- Пул не закрываем, статус waiting остаётся.
+- Важно: диспетчер не стартует игр при 1–2 людях, только шлёт им предложение.
+---
+-- 1.4. Ветка C: N >= 10 — мгновенный старт
+Задача: сформировать игру на 10 живых игроков (без голосования) и запустить.
+1. Взять первые 10 человек (FIFO):
+selected_players = players[0:10]
+2. Создать запись игры:
+game_id = INSERT INTO games (
+game_type, status, total_rounds, is_final_stage, created_at
+) VALUES (
+'quick', 'in_progress', 10, FALSE, now()
+) RETURNING id;
+3. Для каждого игрока создать game_players:
+join_order = 1
+for user_id in selected_players:
+INSERT INTO game_players (
+game_id, user_id, is_bot, join_order, created_at
+) VALUES (
+game_id, user_id, FALSE, join_order, now()
+)
+join_order += 1
+4. Удалить этих игроков из пула:
+DELETE FROM pool_players
+WHERE pool_id = pool.id AND user_id IN (selected_players)
+5. Если после удаления pool стал пустым:
+remaining = SELECT COUNT(*) FROM pool_players WHERE pool_id = pool.id
+if remaining == 0:
+UPDATE pools SET status = 'closed' WHERE id = pool.id
+6. Запустить логику начала игры (создание rounds, round_questions, рассылка первого вопроса и т.п.) — отдельная задача:
+enqueue_task(start_game, game_id)
+7. Оставшихся в пуле (если N > 10) не трогаем — они ждут следующей проверки.
+---
+-- 1.5. Ветка D: 3 <= N <= 9 — запуск голосования
+Задача: взять текущих людей, создать игру в статусе ожидания и за 45 сек решить, стартовать сейчас или ждать.
+1. Создать игру со статусом waiting/pre_start:
+game_id = INSERT INTO games (
+game_type, status, total_rounds, is_final_stage, created_at
+) VALUES (
+'quick', 'pre_start', 10, FALSE, now()
+) RETURNING id;
+2. Привязать всех людей из пула в game_players:
+join_order = 1
+for user_id in players:
+-- все N человек
+INSERT INTO game_players (
+game_id, user_id, is_bot, join_order, created_at
+) VALUES (
+game_id, user_id, FALSE, join_order, now()
+)
+join_order += 1
+3. Удалить этих людей из пула (они “перешли” в игру):
+DELETE FROM pool_players
+WHERE pool_id = pool.id AND user_id IN (players)
+4. Если пул опустел — закрыть:
+remaining = SELECT COUNT(*) FROM pool_players WHERE pool_id = pool.id
+if remaining == 0:
+UPDATE pools SET status = 'closed' WHERE id = pool.id
+5. Для игры создать задачу на голосование через 45 секунд:
+enqueue_delayed_task(process_game_vote, game_id, delay=45s)
+6. Для каждого игрока отправить сообщение голосования:
+```pseudo
+for user_id in players:
+send_message(
+user_id,
+"Игроков сейчас: " + N + ". Начать игру с ботами или подождать ещё 5 минут?",
+inline_buttons = [
+("▶️ НАЧАТЬ СЕЙЧАС", callback_data="vote:start_now:" + game_id),
+("⏳ ЖДАТЬ ЕЩЁ 5 МИНУТ", callback_data="vote:wait_more:" + game_id)
+]
+)
+```
+7. Хэндлер callback’ов на кнопки:
+```pseudo
+on_callback_vote(user_id, game_id, vote):
+-- vote = 'start_now' или 'wait_more'
+-- если игра уже ушла в другой статус, игнорируем
+game = SELECT status FROM games WHERE id = game_id
+if game.status != 'pre_start':
+return
+-- записать/обновить голос
+INSERT INTO game_votes (game_id, user_id, vote, created_at)
+VALUES (game_id, user_id, vote, now())
+ON CONFLICT (game_id, user_id) DO UPDATE
+SET vote = EXCLUDED.vote, created_at = EXCLUDED.created_at;
+```
+---
+## 2. Диспетчер голосования (через 45 секунд)
+Задача `process_game_vote(game_id)` — вызывается Celery’ю / delayed job спустя 45 сек после старта голосования.
+*--* 2.1. Проверка актуальности
+```pseudo
+game = SELECT * FROM games WHERE id = game_id FOR UPDATE;
+if game.status != 'pre_start':
+-- игра уже кем-то запущена/отменена
+return
+```
+(желательно делать `FOR UPDATE`, чтобы избежать гонок).
+*--* 2.2. Получение игроков и голосов
+```pseudo
+players = SELECT user_id FROM game_players
+WHERE game_id = game_id AND is_bot = FALSE;
+votes = SELECT user_id, vote FROM game_votes
+WHERE game_id = game_id;
+```
+- `N_players = players.count`.
+- Построить мапу `vote_by_user`:
+```pseudo
+vote_by_user = { v.user_id: v.vote for v in votes }
+```
+Игроки, которых нет в `vote_by_user` — считаются *согласными начать сейчас* (по ТЗ: неответ = согласие на старт).
+*--* 2.3. Логика принятия решения
+По правилам:
+> Если ВСЕ проголосовали «ЖДАТЬ» → ждём ещё 5 мин.
+> В любом другом случае (хотя бы один «НАЧАТЬ» или неответ) → старт с ботами.
+1. Проверим, есть ли хоть один `start_now` или неответ:
+```pseudo
+all_wait = true
+for user_id in players:
+v = vote_by_user.get(user_id)
+if v is NULL:
+-- не ответил → трактуем как согласие "НАЧАТЬ"
+all_wait = false
+break
+if v == 'start_now':
+all_wait = false
+break
+```
+2. Если `all_wait == true` → *ветка “ЖДАТЬ ЕЩЁ 5 МИНУТ”*.
+Иначе → *ветка “СТАРТОВАТЬ С БОТАМИ”*.
+---
+*--* 2.4. Ветка 1: все выбрали «ЖДАТЬ ЕЩЕ 5 МИНУТ»
+Задача: вернуть игроков обратно в пул, игра `game` — отменена/заморожена.
+1. Вернуть игроков в пул (желательно в уже существующий либо создать новый):
+```pseudo
+pool = SELECT * FROM pools
+WHERE pool_type = 'quick_public'
+AND status = 'waiting'
+ORDER BY created_at ASC
+LIMIT 1
+if pool == null:
+pool_id = INSERT INTO pools (pool_type, status, created_at)
+VALUES ('quick_public', 'waiting', now())
+RETURNING id
+else:
+pool_id = pool.id
+```
+2. Добавить игроков в `pool_players`:
+```pseudo
+for user_id in players:
+INSERT INTO pool_players (pool_id, user_id, joined_at)
+VALUES (pool_id, user_id, now())
+ON CONFLICT (pool_id, user_id) DO NOTHING; -- на случай дублей
+```
+3. Обновить статус игры:
+```pseudo
+UPDATE games
+SET status = 'cancelled'
+WHERE id = game_id;
+```
+4. (опционально) Оповестить игроков:
+```pseudo
+for user_id in players:
+send_message(
+user_id,
+"Все проголосовали за ожидание. Ждём ещё 5 минут, ты остаёшься в очереди на быструю игру."
+)
+```
+5. На следующем 5-минутном тике диспетчер пула снова увидит пул с этими игроками и повторит логику.
+---
+*--* 2.5. Ветка 2: старт с ботами
+Задача: заполнить игру ботами до 10 участников и запустить.
+1. Посчитать, сколько ботов нужно:
+```pseudo
+N_live = players.count
+N_total = 10
+N_bots_needed = N_total - N_live
+if N_bots_needed < 0:
+N_bots_needed = 0
+```
+2. Выбрать или создать ботов (зависит от реализации). Простой вариант — иметь заранее набор `users` с `is_bot = true`:
+```pseudo
+bots = SELECT id, bot_difficulty FROM users
+WHERE is_bot = true
+LIMIT N_bots_needed
+```
+3. Добавить ботов в `game_players`:
+```pseudo
+current_max_join_order = SELECT COALESCE(MAX(join_order), 0)
+FROM game_players
+WHERE game_id = game_id
+join_order = current_max_join_order + 1
+for bot in bots:
+INSERT INTO game_players (
+game_id, user_id, is_bot, bot_difficulty, join_order, created_at
+) VALUES (
+game_id, bot.id, TRUE, bot.bot_difficulty, join_order, now()
+)
+join_order += 1
+```
+4. Обновить статус игры на `in_progress` и зафиксировать `started_at`:
+```pseudo
+UPDATE games
+SET status = 'in_progress',
+started_at = now()
+WHERE id = game_id;
+```
+5. Оповестить живых игроков:
+```pseudo
+for user_id in players:
+send_message(
+user_id,
+"Игра стартует прямо сейчас! Недостающие места заполнены ботами."
+)
+```
+6. Запустить игровую логику (создание первого раунда, выбор вопросов и т.д.):
+```pseudo
+enqueue_task(start_game, game_id)
+```
+---
+## 3. Важные детали реализации
+*--* 3.1. Блокировки/конкуренция
+- В `process_game_vote(game_id)` делай `SELECT ... FOR UPDATE` по `games`,
+чтобы два параллельных таска (или клик по кнопке в последнюю секунду) не сломали статус.
+- При работе с пулом можно:
+- либо использовать `FOR UPDATE` на `pools` при выборке активного пула;
+- либо иметь “мастер-задачу” (одна Celery-очередь), чтобы не было одновременного запуска диспетчера пула.
+*--* 3.2. Повторный запуск задач
+- Процедуры должны быть идемпотентными: если таск внезапно повторился, он не должен создавать дубликаты игр/пулов.
+- Примеры защиты:
+- перед созданием игры ещё раз проверять, нет ли уже `games` в статусе `pre_start/in_progress` для этих игроков;
+- использовать статусы `forming_game`, чтобы зафиксировать, что пул уже “в обработке”.
+*--* 3.3. Где создавать пул
+- Можно держать *один текущий активный пул* `quick_public`:
+- при нажатии “Быстрая игра”:
+- ищешь активный пул `waiting`;
+- если нет — создаёшь новый;
+- добавляешь игрока в `pool_players`.
+- Диспетчер пула каждые 5 минут работает только с *одним* активным пулом.
+ChatGPT & DeepSeek ♥️, [17.01.2026 14:34]
+Для твоего проекта формат лучше сразу зафиксировать такой, чтобы:
+1) удобно было хранить в БД,
+2) легко было генерировать через ИИ,
+3) понятно было модераторам/редакторам.
+Ниже — конкретный формат: JSON-объект вопроса + его маппинг в твою таблицу questions.
+---
+## 1. Формат вопроса (логический, в коде / при генерации)
+Один вопрос:
+{
+"theme": "Кино",
+"difficulty": "medium",
+"question_text": "Какой актёр сыграл Тони Старка в киновселенной Marvel?",
+"options": [
+"Крис Эванс",
+"Роберт Дауни-младший",
+"Крис Хемсворт",
+"Марк Руффало"
+],
+"correct_index": 1,
+"source_type": "ai"
+}
+Пояснения:
+- theme — название или код темы ("movies", "Наука", и т.д.).
+- difficulty — "easy" | "medium" | "hard" (по желанию, можно не использовать).
+- question_text — текст вопроса.
+- options — массив ровно из 4 строк, порядок важен (A, B, C, D).
+- correct_index — индекс правильного варианта в массиве options (0–3).
+- source_type — "parsed" | "ai" | "user".
+Такой формат:
+- удобно отдавать/принимать из ИИ;
+- легко валидировать и конвертировать в БД.
+---
+## 2. Как это ложится в таблицу questions
+Твоя таблица (из предыдущего сообщения) уже подходит:
+CREATE TABLE questions (
+id
+BIGSERIAL PRIMARY KEY,
+theme_id
+BIGINT NOT NULL REFERENCES themes(id) ON DELETE RESTRICT,
+question_text
+TEXT NOT NULL,
+option_a
+TEXT NOT NULL,
+option_b
+TEXT NOT NULL,
+option_c
+TEXT NOT NULL,
+option_d
+TEXT NOT NULL,
+correct_option
+CHAR(1) NOT NULL,
+-- 'A','B','C','D'
+difficulty
+VARCHAR(20),
+-- 'easy', 'medium', 'hard'
+source_type
+VARCHAR(20) NOT NULL,
+-- 'parsed', 'ai', 'user'
+created_by
+BIGINT REFERENCES users(id),
+is_approved
+BOOLEAN NOT NULL DEFAULT TRUE,
+created_at
+TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+Преобразование JSON → строка в БД:
+q = вопрос в формате JSON (см. выше)
+theme_id = SELECT id FROM themes WHERE name = q.theme OR code = q.theme
+INSERT INTO questions (
+theme_id,
+question_text,
+option_a,
+option_b,
+option_c,
+option_d,
+correct_option,
+difficulty,
+source_type,
+created_by,
+is_approved
+) VALUES (
+theme_id,
+q.question_text,
+q.options[0],
+q.options[1],
+q.options[2],
+q.options[3],
+CASE q.correct_index
+WHEN 0 THEN 'A'
+WHEN 1 THEN 'B'
+WHEN 2 THEN 'C'
+WHEN 3 THEN 'D'
+END,
+q.difficulty,
+q.source_type,
+:created_by,
+-- NULL для импортированных/ИИ, id для юзерских
+:is_approved
+-- TRUE для своих/проверенных, FALSE для новых юзерских
+);
+---
+## 3. Как отдавать вопрос в игру
+Когда ты выбираешь вопрос из БД для раунда, ты можешь привести его к удобному формату для бота:
+{
+"question_id": 12345,
+"theme": "Кино",
+"difficulty": "medium",
+"question_text": "Какой актёр сыграл Тони Старка в киновселенной Marvel?",
+"options": [
+{ "label": "A", "text": "Крис Эванс" },
+{ "label": "B", "text": "Роберт Дауни-младший" },
+{ "label": "C", "text": "Крис Хемсворт" },
+{ "label": "D", "text": "Марк Руффало" }
+],
+"correct_option": "B"
+}
+Но внутри базы всё равно лучше хранить в нормализованном виде, как выше: отдельные поля option_a..d + correct_option.
+---
+## 4. Формат для модератора / импорта CSV
+Чтобы руками заносить/импортировать, можно использовать CSV с колонками:
+- theme
+- difficulty
+- question_text
+- option_a
+- option_b
+- option_c
+- option_d
+- correct_option (A/B/C/D)
+- source_type
+Пример строки CSV:
+Кино,medium,"Какой актёр сыграл Тони Старка в киновселенной Marvel?","Крис Эванс","Роберт Дауни-младший","Крис Хемсворт","Марк Руффало",B,parsed
+Скрипт импорта:
+- читает CSV,
+- находит/создаёт тему,
+- мапит в структуру questions.
+---
+## 5. Формат для генерации через ИИ (промпт-ориентир)
+Когда ты просишь ИИ сгенерировать вопросы, даёшь чёткий формат:
+Сгенерируй 20 викторинных вопросов по теме "Кино".
+Формат ответа — JSON-массив.
+Каждый элемент:
+- theme: строка (например, "Кино"),
+- difficulty: "easy" | "medium" | "hard",
+- questiontext: строка,
+- options: массив ровно из 4 строк (варианты ответов),
+- correctindex: число 0, 1, 2 или 3 (индекс правильного варианта в массиве options).
+Ответ — только JSON, без комментариев и без дополнительного текста.
+Так ты сразу получаешь нужную структуру, а дальше только сохраняешь в БД.
+---
+Итого: для твоей игры стандарт — вопрос = текст + 4 опции (A–D) + указание правильного варианта (correct_option или correct_index). Всё остальное (тема, сложность, источник) — служебные поля для отбора и статистики.
+Нужно помочь тебе сформировать точный JSON-формат и SQL-скрипт импорта для первого датасета вопросов?
