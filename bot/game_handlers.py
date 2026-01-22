@@ -35,6 +35,8 @@ async def handle_answer(
     query = update.callback_query
     user = update.effective_user
     
+    logger.info(f"Handling answer: user={user.id if user else None}, round_question_id={round_question_id}, option={selected_option}")
+    
     if not user:
         await query.answer("Ошибка: пользователь не найден", show_alert=True)
         return
@@ -144,22 +146,14 @@ async def handle_answer(
         
         session.commit()
         
-        # Respond to user with answer feedback
+        # Send feedback message (callback already answered in main handler)
         try:
             if is_correct:
-                await query.answer("✅ Правильно!", show_alert=False)
+                await query.message.reply_text("✅ Правильно!")
             else:
-                await query.answer(f"❌ Неправильно. Правильный ответ: {question.correct_option}", show_alert=False)
+                await query.message.reply_text(f"❌ Неправильно. Правильный ответ: {question.correct_option}")
         except Exception as e:
-            logger.error(f"Failed to answer callback query: {e}")
-            # Try to send message as fallback
-            try:
-                if is_correct:
-                    await query.message.reply_text("✅ Правильно!")
-                else:
-                    await query.message.reply_text(f"❌ Неправильно. Правильный ответ: {question.correct_option}")
-            except:
-                pass
+            logger.error(f"Failed to send answer feedback: {e}")
         
         # Handle early victory - delegate to Celery task to avoid blocking callback handler
         if early_victory_result['early_victory']:

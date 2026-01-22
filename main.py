@@ -202,11 +202,13 @@ async def callback_query_handler(update: Update, context) -> None:
     
     try:
         data = query.data
+        logger.debug(f"Callback query received: {data[:50]}...")
         if data.startswith("vote:"):
             await query.answer()  # Answer immediately for votes
             await handle_vote(update, context, data)
         elif data.startswith("answer:"):
-            # Don't answer here - handle_answer will do it with feedback
+            # Answer immediately to prevent button hanging, then process
+            await query.answer()  # Answer immediately
             await handle_answer(update, context, data)
         elif data.startswith("training:"):
             await query.answer()
