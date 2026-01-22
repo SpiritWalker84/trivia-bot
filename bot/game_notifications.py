@@ -107,13 +107,17 @@ class GameNotifications:
             
             # Start countdown timer (update message every second)
             from tasks.question_timer import start_question_timer
+            from utils.logging import get_logger
+            timer_logger = get_logger(__name__)
+            time_limit = self.config.QUESTION_TIME_LIMIT
+            timer_logger.info(f"Starting timer for question {round_question.id}, user {user_id}, time_limit={time_limit}")
             start_question_timer.delay(
                 game_id=game_id,
                 round_id=round_id,
                 round_question_id=round_question.id,
                 user_id=user_id,
                 message_id=message.message_id,
-                time_limit=self.config.QUESTION_TIME_LIMIT
+                time_limit=time_limit
             )
             
             return True

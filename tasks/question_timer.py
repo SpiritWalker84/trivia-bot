@@ -33,6 +33,7 @@ def start_question_timer(
         time_limit: Time limit in seconds
     """
     # Schedule first update immediately
+    logger.info(f"Starting question timer for round_question_id={round_question_id}, user_id={user_id}, time_limit={time_limit}")
     update_question_timer.apply_async(
         args=[game_id, round_id, round_question_id, user_id, message_id, time_limit, time_limit],
         countdown=0
@@ -135,17 +136,20 @@ def update_question_timer(
     
     # Update message with keyboard preserved
     try:
+        logger.info(f"Updating timer: remaining={remaining}, time_limit={time_limit}, user_id={user_id}, message_id={message_id}")
         bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
-        bot.edit_message_text(
+        import asyncio
+        asyncio.run(bot.edit_message_text(
             chat_id=user_id,
             message_id=message_id,
             text=question_text,
             reply_markup=keyboard
-        )
+        ))
+        logger.info(f"Timer updated successfully: remaining={remaining}")
     except Exception as e:
         # Message might be already edited or deleted, ignore
-        logger.debug(f"Could not update timer message: {e}")
-        return
+        logger.warning(f"Could not update timer message: {e}", exc_info=True)
+        # Don't return - continue scheduling next update
     
     # Schedule next update if time remaining
     if remaining > 1:
