@@ -139,16 +139,27 @@ async def handle_answer(
             user_id=db_user.id,
             selected_option=selected_option.upper(),
             is_correct=is_correct,
-            answer_time=answer_time
+            answer_time=float(answer_time_decimal)
         )
         
         session.commit()
         
-        # Respond to user
-        if is_correct:
-            await query.answer("✅ Правильно!", show_alert=False)
-        else:
-            await query.answer("❌ Неправильно", show_alert=False)
+        # Respond to user with answer feedback
+        try:
+            if is_correct:
+                await query.answer("✅ Правильно!", show_alert=False)
+            else:
+                await query.answer(f"❌ Неправильно. Правильный ответ: {question.correct_option}", show_alert=False)
+        except Exception as e:
+            logger.error(f"Failed to answer callback query: {e}")
+            # Try to send message as fallback
+            try:
+                if is_correct:
+                    await query.message.reply_text("✅ Правильно!")
+                else:
+                    await query.message.reply_text(f"❌ Неправильно. Правильный ответ: {question.correct_option}")
+            except:
+                pass
         
         # Handle early victory
         if early_victory_result['early_victory']:

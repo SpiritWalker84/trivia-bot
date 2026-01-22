@@ -199,17 +199,31 @@ async def handle_stats(update: Update, context) -> None:
 async def callback_query_handler(update: Update, context) -> None:
     """Handle callback queries (inline button clicks)."""
     query = update.callback_query
-    await query.answer()
     
-    data = query.data
-    if data.startswith("vote:"):
-        await handle_vote(update, context, data)
-    elif data.startswith("answer:"):
-        await handle_answer(update, context, data)
-    elif data.startswith("training:"):
-        await handle_training_difficulty(update, context, data)
-    elif data.startswith("admin:"):
-        await handle_admin(update, context, data)
+    try:
+        data = query.data
+        if data.startswith("vote:"):
+            await query.answer()  # Answer immediately for votes
+            await handle_vote(update, context, data)
+        elif data.startswith("answer:"):
+            # Don't answer here - handle_answer will do it with feedback
+            await handle_answer(update, context, data)
+        elif data.startswith("training:"):
+            await query.answer()
+            await handle_training_difficulty(update, context, data)
+        elif data.startswith("admin:"):
+            await query.answer()
+            await handle_admin(update, context, data)
+        else:
+            logger.warning(f"Unknown callback data: {data}")
+            await query.answer("Неизвестная команда", show_alert=False)
+    except Exception as e:
+        logger.error(f"Error handling callback query: {e}", exc_info=True)
+        # Try to answer callback to prevent button from hanging
+        try:
+            await query.answer("Произошла ошибка", show_alert=True)
+        except:
+            pass
 
 
 async def handle_vote(update: Update, context, data: str) -> None:
