@@ -78,8 +78,10 @@ def finish_round_task(game_id: int, round_number: int) -> None:
     from database.session import db_session
     from database.models import Game, Round
     
+    logger.info(f"Finishing round {round_number} for game {game_id}")
     game_engine = GameEngine()
     eliminated_user_id = game_engine.finish_round(game_id, round_number)
+    logger.info(f"Round {round_number} finished, eliminated_user_id={eliminated_user_id}")
     
     # Send round results
     try:
@@ -88,52 +90,33 @@ def finish_round_task(game_id: int, round_number: int) -> None:
         asyncio.run(notifications.send_round_results(
             game_id, round_number, eliminated_user_id
         ))
+        logger.info(f"Round results sent for game {game_id}, round {round_number}")
     except Exception as e:
-        logger.error(f"Failed to send round results: {e}")
+        logger.error(f"Failed to send round results: {e}", exc_info=True)
     
-    if eliminated_user_id == -1:
-        logger.info(f"Game {game_id} round {round_number}: Tie-break needed")
-        # TODO: Trigger tie-break
-    elif eliminated_user_id:
-        logger.info(f"Game {game_id} round {round_number}: Player {eliminated_user_id} eliminated")
+    # Check if game should continue
+    with db_session() as session:
+        game = session.query(Game).filter(Game.id == game_id).first()
+        if not game:
+            logger.error(f"Game {game_id} not found after finishing round {round_number}")
+            return
         
-        # Check if game should continue
-        with db_session() as session:
-            game = session.query(Game).filter(Game.id == game_id).first()
-            if not game:
-                return
-            
-            alive_count = len([gp for gp in game.players if not gp.is_eliminated])
-            
-            if alive_count <= 1:
-                # Game finished
-                finish_game_task.delay(game_id)
-            elif round_number < config.config.ROUNDS_PER_GAME:
-                # Continue to next round
-                start_next_round_task.delay(game_id, round_number + 1)
-            else:
-                # Last round finished
-                finish_game_task.delay(game_id)
-    else:
-        logger.warning(f"Game {game_id} round {round_number}: No player eliminated")
-        # Even if no elimination, check if game should continue
-        with db_session() as session:
-            game = session.query(Game).filter(Game.id == game_id).first()
-            if not game:
-                return
-            
-            alive_count = len([gp for gp in game.players if not gp.is_eliminated])
-            
-            if alive_count <= 1:
-                # Game finished
-                finish_game_task.delay(game_id)
-            elif round_number < config.config.ROUNDS_PER_GAME:
-                # Continue to next round
-                logger.info(f"Game {game_id}: Continuing to round {round_number + 1}")
-                start_next_round_task.delay(game_id, round_number + 1)
-            else:
-                # Last round finished
-                finish_game_task.delay(game_id)
+        alive_count = len([gp for gp in game.players if not gp.is_eliminated])
+        logger.info(f"Game {game_id} after round {round_number}: {alive_count} players alive, ROUNDS_PER_GAME={config.config.ROUNDS_PER_GAME}")
+        
+        if alive_count <= 1:
+            # Game finished
+            logger.info(f"Game {game_id}: Only {alive_count} player(s) alive, finishing game")
+            finish_game_task.delay(game_id)
+        elif round_number < config.config.ROUNDS_PER_GAME:
+            # Continue to next round
+            next_round = round_number + 1
+            logger.info(f"Game {game_id}: Continuing to round {next_round} (current: {round_number}, max: {config.config.ROUNDS_PER_GAME})")
+            start_next_round_task.delay(game_id, next_round)
+        else:
+            # Last round finished
+            logger.info(f"Game {game_id}: Last round ({round_number}) finished, finishing game")
+            finish_game_task.delay(game_id)
 
 
 @celery_app.task(name="tasks.game_tasks.start_next_round_task")
@@ -149,11 +132,13 @@ def start_next_round_task(game_id: int, round_number: int) -> None:
     from database.models import Game, Round, RoundQuestion
     from game.engine import GameEngine
     
+    logger.info(f"Starting round {round_number} for game {game_id}")
     game_engine = GameEngine()
     
     with db_session() as session:
         game = session.query(Game).filter(Game.id == game_id).first()
         if not game:
+            logger.error(f"Game {game_id} not found when starting round {round_number}")
             return
         
         # Create round
@@ -165,6 +150,7 @@ def start_next_round_task(game_id: int, round_number: int) -> None:
             logger.error(f"Failed to create round {round_number} for game {game_id}")
             return
         
+        logger.info(f"Round {round_number} created for game {game_id}, round_id={round_obj.id}")
         game.current_round = round_number
         round_obj.status = 'in_progress'
         round_obj.started_at = datetime.now(pytz.UTC)
@@ -177,10 +163,13 @@ def start_next_round_task(game_id: int, round_number: int) -> None:
         ).first()
         
         if first_question:
+            logger.info(f"Sending first question {first_question.id} for round {round_number} in game {game_id}")
             from tasks.question_sender import send_question_to_players
             send_question_to_players.delay(
                 game_id, round_obj.id, first_question.id
             )
+        else:
+            logger.error(f"First question not found for round {round_number} in game {game_id}")
 
 
 @celery_app.task(name="tasks.game_tasks.check_early_victory_task")
