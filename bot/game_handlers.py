@@ -161,64 +161,16 @@ async def handle_answer(
             except:
                 pass
         
-        # Handle early victory
+        # Handle early victory - delegate to Celery task to avoid blocking callback handler
         if early_victory_result['early_victory']:
             logger.info(f"Early victory in game {game.id}! Winner: {early_victory_result['winner_user_id']}")
             
-            # Send notifications
-            bot = context.bot
-            notifications = GameNotifications(bot)
-            
-            # Get winner info for notification
-            with db_session() as session:
-                winner_user = session.query(User).filter(
-                    User.id == early_victory_result['winner_user_id']
-                ).first()
-                
-                # Get scores
-                winner_answers = session.query(Answer).filter(
-                    Answer.game_id == game.id,
-                    Answer.round_id == round_obj.id,
-                    Answer.user_id == early_victory_result['winner_user_id']
-                ).all()
-                winner_score = sum(1 for a in winner_answers if a.is_correct)
-                
-                alive_players = [gp for gp in game.players if not gp.is_eliminated]
-                loser = next((p for p in alive_players if p.user_id != early_victory_result['winner_user_id']), None)
-                loser_score = 0
-                if loser:
-                    loser_answers = session.query(Answer).filter(
-                        Answer.game_id == game.id,
-                        Answer.round_id == round_obj.id,
-                        Answer.user_id == loser.user_id
-                    ).all()
-                    loser_score = sum(1 for a in loser_answers if a.is_correct)
-                
-                # Count remaining questions
-                total_questions = session.query(RoundQuestion).filter(
-                    RoundQuestion.round_id == round_obj.id
-                ).count()
-                answered_question_ids = set()
-                for gp in alive_players:
-                    answers = session.query(Answer).filter(
-                        Answer.round_id == round_obj.id,
-                        Answer.user_id == gp.user_id
-                    ).all()
-                    answered_question_ids.update(a.round_question_id for a in answers)
-                questions_remaining = total_questions - len(answered_question_ids)
-            
-            await notifications.send_early_victory_notification(
+            # Send notification via Celery to avoid blocking
+            from tasks.game_tasks import send_early_victory_notification_task
+            send_early_victory_notification_task.delay(
                 game_id=game.id,
-                winner_user_id=early_victory_result['winner_user_id'],
-                leader_score=winner_score,
-                loser_score=loser_score,
-                questions_remaining=questions_remaining
-            )
-            
-            # Send final results
-            await notifications.send_round_results(
-                game_id=game.id,
-                round_number=round_obj.round_number
+                round_id=round_obj.id,
+                winner_user_id=early_victory_result['winner_user_id']
             )
 
 
