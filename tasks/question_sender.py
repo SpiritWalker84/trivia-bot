@@ -23,6 +23,15 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
     from telegram import Bot
     from bot.game_notifications import GameNotifications
     
+    # Update round status to in_progress if this is the first question
+    with db_session() as session:
+        round_obj = session.query(Round).filter(Round.id == round_id).first()
+        if round_obj and round_obj.status == 'not_started':
+            round_obj.status = 'in_progress'
+            if not round_obj.started_at:
+                round_obj.started_at = datetime.now(pytz.UTC)
+            session.commit()
+    
     try:
         bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
         notifications = GameNotifications(bot)
