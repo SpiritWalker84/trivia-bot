@@ -165,6 +165,46 @@ def start_next_round_task(game_id: int, round_number: int) -> None:
             )
 
 
+@celery_app.task(name="tasks.game_tasks.check_early_victory_task")
+def check_early_victory_task(
+    game_id: int,
+    round_id: int,
+    round_question_id: int,
+    user_id: int,
+    selected_option: str,
+    is_correct: bool,
+    answer_time: float
+) -> None:
+    """
+    Check for early victory after answer (only in final round).
+    Answer is already saved, so we just check the condition.
+    
+    Args:
+        game_id: Game ID
+        round_id: Round ID
+        round_question_id: Round question ID (not used, but kept for compatibility)
+        user_id: User ID who answered
+        selected_option: Selected option (not used, but kept for compatibility)
+        is_correct: Whether answer is correct (not used, but kept for compatibility)
+        answer_time: Time taken to answer (not used, but kept for compatibility)
+    """
+    game_engine = GameEngine()
+    
+    # Check for early victory (answer is already saved in callback handler)
+    winner_user_id = game_engine.check_early_victory(game_id, round_id)
+    
+    if winner_user_id:
+        logger.info(f"Early victory in game {game_id}! Winner: {winner_user_id}")
+        # Finish game
+        game_engine.finish_game(game_id, early_victory=True, winner_user_id=winner_user_id)
+        # Send notification
+        send_early_victory_notification_task.delay(
+            game_id=game_id,
+            round_id=round_id,
+            winner_user_id=winner_user_id
+        )
+
+
 @celery_app.task(name="tasks.game_tasks.send_early_victory_notification_task")
 def send_early_victory_notification_task(game_id: int, round_id: int, winner_user_id: int) -> None:
     """

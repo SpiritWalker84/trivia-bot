@@ -130,23 +130,9 @@ async def handle_answer(
             game_player.total_score += 1
         game_player.total_time += answer_time_decimal
         
-        session.flush()
-        
-        # Check for early victory (only in final round)
-        game_engine = GameEngine()
-        early_victory_result = game_engine.process_answer_and_check_early_victory(
-            game_id=game.id,
-            round_id=round_obj.id,
-            round_question_id=round_question_id,
-            user_id=db_user.id,
-            selected_option=selected_option.upper(),
-            is_correct=is_correct,
-            answer_time=float(answer_time_decimal)
-        )
-        
         session.commit()
         
-        # Send feedback message (callback already answered in main handler)
+        # Send feedback message immediately (callback already answered in main handler)
         try:
             if is_correct:
                 await query.message.reply_text("✅ Правильно!")
@@ -155,16 +141,18 @@ async def handle_answer(
         except Exception as e:
             logger.error(f"Failed to send answer feedback: {e}")
         
-        # Handle early victory - delegate to Celery task to avoid blocking callback handler
-        if early_victory_result['early_victory']:
-            logger.info(f"Early victory in game {game.id}! Winner: {early_victory_result['winner_user_id']}")
-            
-            # Send notification via Celery to avoid blocking
-            from tasks.game_tasks import send_early_victory_notification_task
-            send_early_victory_notification_task.delay(
+        # Check for early victory asynchronously via Celery (only in final round)
+        # This avoids blocking the callback handler
+        if game.is_final_stage:
+            from tasks.game_tasks import check_early_victory_task
+            check_early_victory_task.delay(
                 game_id=game.id,
                 round_id=round_obj.id,
-                winner_user_id=early_victory_result['winner_user_id']
+                round_question_id=round_question_id,
+                user_id=db_user.id,
+                selected_option=selected_option.upper(),
+                is_correct=is_correct,
+                answer_time=float(answer_time_decimal)
             )
 
 
