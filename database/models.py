@@ -222,8 +222,8 @@ class Round(Base):
     # Relationships
     game = relationship("Game", back_populates="rounds")
     theme = relationship("Theme", back_populates="rounds")
-    parent_round = relationship("Round", remote_side=[id])
-    tie_break_rounds = relationship("Round", backref="parent")
+    parent_round = relationship("Round", remote_side=[id], foreign_keys=[parent_round_id])
+    tie_break_rounds = relationship("Round", foreign_keys=[parent_round_id])
     questions = relationship("RoundQuestion", back_populates="round", cascade="all, delete-orphan")
     answers = relationship("Answer", back_populates="round")
     
