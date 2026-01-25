@@ -559,14 +559,32 @@ async def handle_private_game_callback(update: Update, context, data: str) -> No
     """Route private game callbacks to appropriate handlers."""
     # Parse callback data: private:action:param
     parts = data.split(":", 2)
-    if len(parts) < 3:
+    if len(parts) < 2:
         logger.warning(f"Invalid private game callback data: {data}")
         return
     
     action = parts[1]
-    param = parts[2]
+    param = parts[2] if len(parts) > 2 else ""
     
-    if action == "difficulty":
+    if action == "create_with_friends":
+        # Handle creating game with selected friends
+        await handle_private_game_create_with_friends(update, context)
+    elif action == "cancel_selection":
+        # Handle canceling friend selection
+        query = update.callback_query
+        await query.answer("Выбор друзей отменён")
+        
+        # Clear context
+        context.user_data.pop('selected_friends', None)
+        
+        # Restore main menu
+        from bot.keyboards import MainMenuKeyboard
+        await query.edit_message_text("❌ Выбор друзей отменён")
+        await query.message.reply_text(
+            "Главное меню:",
+            reply_markup=MainMenuKeyboard.get_keyboard()
+        )
+    elif action == "difficulty":
         # Handle difficulty selection: private:difficulty:game_id:difficulty
         parts = param.split(":", 1)
         if len(parts) == 2:
