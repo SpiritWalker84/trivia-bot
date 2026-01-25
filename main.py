@@ -232,6 +232,8 @@ async def handle_stats(update: Update, context) -> None:
 
 async def callback_query_handler(update: Update, context) -> None:
     """Handle callback queries (inline button clicks)."""
+    from bot.private_game import handle_private_game_callback
+    
     query = update.callback_query
     
     try:
