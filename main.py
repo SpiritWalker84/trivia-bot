@@ -5,6 +5,7 @@ import asyncio
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram import UsersShared
 import config
 from utils.logging import setup_logging, get_logger
 from utils.errors import ConfigurationError
@@ -79,6 +80,12 @@ async def help_command(update: Update, context) -> None:
 
 async def message_handler(update: Update, context) -> None:
     """Handle text messages."""
+    # Check if this is a UsersShared update (friends selection)
+    if update.message and update.message.users_shared:
+        from bot.private_game import handle_private_game_users_selected
+        await handle_private_game_users_selected(update, context, update.message.users_shared)
+        return
+    
     text = update.message.text
     
     if text == "🏃 БЫСТРАЯ ИГРА":
@@ -472,6 +479,8 @@ def main() -> None:
     # Register handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
+    # Handle UsersShared (friends selection) - must be before TEXT handler
+    application.add_handler(MessageHandler(filters.StatusUpdate.USERS_SHARED, message_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     application.add_handler(CallbackQueryHandler(callback_query_handler))
     

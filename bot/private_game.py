@@ -1,8 +1,8 @@
 """
 Private game handlers and logic.
 """
-from typing import Optional
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from typing import Optional, List
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, UsersShared
 from database.session import db_session
 from database.queries import UserQueries, GameQueries
 from database.models import Game, GamePlayer
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 
 async def create_private_game(update: Update, context) -> None:
-    """Create private game when user clicks button."""
+    """Create private game when user clicks button - request friends selection."""
     user = update.effective_user
     user_id = user.id
     
@@ -34,66 +34,135 @@ async def create_private_game(update: Update, context) -> None:
         ).first()
         
         if existing_game:
-            # Check how many players already joined
-            players_count = session.query(GamePlayer).filter(
-                GamePlayer.game_id == existing_game.id
-            ).count()
-            
-            # Get bot username from context if available
-            bot_username = "your_bot"  # Default
-            if context and hasattr(context, 'bot') and context.bot:
-                bot_username = context.bot.username or "your_bot"
-            
-            invite_link = f"https://t.me/{bot_username}?start=private_{existing_game.id}"
-            
-            await update.message.reply_text(
-                f"👥 У вас уже есть приватная игра!\n\n"
-                f"Игроков: {players_count}/10\n\n"
-                f"Поделитесь ссылкой с друзьями:\n"
-                f"`{invite_link}`\n\n"
-                f"Или попросите их ввести:\n"
-                f"`/start private_{existing_game.id}`",
-                parse_mode='Markdown'
+            # Cancel existing game
+            existing_game.status = 'cancelled'
+            session.commit()
+    
+    # Request users selection using KeyboardButton.request_users
+    from telegram import ReplyKeyboardMarkup, KeyboardButton
+    
+    keyboard = ReplyKeyboardMarkup(
+        [[KeyboardButton(
+            "👥 Выбрать друзей",
+            request_users=KeyboardButton.RequestUsers(
+                request_id=1,
+                max_quantity=9  # Max 9 friends (creator is 10th)
             )
-            return
+        )]],
+        one_time_keyboard=True,
+        resize_keyboard=True
+    )
+    
+    await update.message.reply_text(
+        "👥 Создание приватной игры\n\n"
+        "📱 Нажмите кнопку ниже, чтобы выбрать друзей из контактов.\n"
+        "Можно выбрать до 9 друзей. Оставшиеся места заполнятся ботами.",
+        reply_markup=keyboard
+    )
+
+
+async def handle_private_game_users_selected(update: Update, context, users_shared: UsersShared) -> None:
+    """Handle when user selects friends from contacts."""
+    user = update.effective_user
+    user_id = user.id
+    
+    # Get selected users
+    selected_users = users_shared.users
+    if not selected_users:
+        await update.message.reply_text("❌ Не выбрано ни одного друга. Попробуйте снова.")
+        return
+    
+    # Limit to 9 friends (creator is 10th)
+    selected_users = selected_users[:9]
+    
+    with db_session() as session:
+        # Get or create creator user
+        db_creator = UserQueries.get_or_create_user(
+            session,
+            telegram_id=user_id,
+            username=user.username,
+            full_name=f"{user.first_name} {user.last_name or ''}".strip()
+        )
         
         # Create new private game
         game = GameQueries.create_game(
             session,
             game_type='private',
-            creator_id=db_user.id,
+            creator_id=db_creator.id,
             total_rounds=10
         )
         
         # Add creator as first player
-        game_player = GamePlayer(
+        creator_player = GamePlayer(
             game_id=game.id,
-            user_id=db_user.id,
+            user_id=db_creator.id,
             is_bot=False,
             join_order=1
         )
-        session.add(game_player)
+        session.add(creator_player)
+        
+        # Add selected friends
+        join_order = 2
+        added_users = []
+        for tg_user in selected_users:
+            # Skip if user is a bot
+            if tg_user.is_bot:
+                continue
+            
+            # Get or create user in database
+            db_user = UserQueries.get_or_create_user(
+                session,
+                telegram_id=tg_user.id,
+                username=tg_user.username,
+                full_name=f"{tg_user.first_name} {tg_user.last_name or ''}".strip()
+            )
+            
+            # Check if already added (shouldn't happen, but just in case)
+            existing = session.query(GamePlayer).filter(
+                GamePlayer.game_id == game.id,
+                GamePlayer.user_id == db_user.id
+            ).first()
+            
+            if not existing:
+                friend_player = GamePlayer(
+                    game_id=game.id,
+                    user_id=db_user.id,
+                    is_bot=False,
+                    join_order=join_order
+                )
+                session.add(friend_player)
+                added_users.append(tg_user)
+                join_order += 1
+        
         session.commit()
         
-        logger.info(f"Created private game {game.id} by user {user_id}")
+        logger.info(f"Created private game {game.id} by user {user_id} with {len(added_users)} friends")
     
-    # Ask for bot difficulty - use a custom keyboard that routes to private game handler
+    # Show selected friends
+    friends_text = "✅ Выбрано друзей: " + str(len(added_users))
+    if added_users:
+        friends_text += "\n\n👥 Друзья:\n"
+        for i, tg_user in enumerate(added_users, 1):
+            name = tg_user.first_name or tg_user.username or f"ID{tg_user.id}"
+            friends_text += f"{i}. {name}\n"
+    
+    # Ask for bot difficulty
     keyboard = [
         [
-            InlineKeyboardButton("Новичок", callback_data="private:difficulty:novice"),
-            InlineKeyboardButton("Любитель", callback_data="private:difficulty:amateur"),
-            InlineKeyboardButton("Эксперт", callback_data="private:difficulty:expert")
+            InlineKeyboardButton("Новичок", callback_data=f"private:difficulty:{game.id}:novice"),
+            InlineKeyboardButton("Любитель", callback_data=f"private:difficulty:{game.id}:amateur"),
+            InlineKeyboardButton("Эксперт", callback_data=f"private:difficulty:{game.id}:expert")
         ]
     ]
     
     await update.message.reply_text(
-        "👥 Приватная игра создана!\n\n"
-        "🤖 Выберите сложность ботов для заполнения оставшихся мест:",
+        f"{friends_text}\n\n"
+        f"🤖 Выберите сложность ботов для заполнения оставшихся мест:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-async def handle_private_game_difficulty(update: Update, context, difficulty: str) -> None:
+async def handle_private_game_difficulty(update: Update, context, game_id: int, difficulty: str) -> None:
     """Handle bot difficulty selection for private game."""
     query = update.callback_query
     await query.answer()
@@ -106,15 +175,14 @@ async def handle_private_game_difficulty(update: Update, context, difficulty: st
             await query.edit_message_text("Ошибка: пользователь не найден")
             return
         
-        # Find waiting private game created by this user
-        game = session.query(Game).filter(
-            Game.game_type == 'private',
-            Game.creator_id == db_user.id,
-            Game.status == 'waiting'
-        ).first()
-        
+        # Get game
+        game = GameQueries.get_game_by_id(session, game_id)
         if not game:
             await query.edit_message_text("Ошибка: игра не найдена")
+            return
+        
+        if game.creator_id != db_user.id:
+            await query.answer("Только создатель игры может выбрать сложность", show_alert=True)
             return
         
         # Store bot difficulty
@@ -133,22 +201,14 @@ async def handle_private_game_difficulty(update: Update, context, difficulty: st
         }
         difficulty_name = difficulty_map.get(difficulty, difficulty)
         
-        # Get bot username from context if available
-        bot_username = "your_bot"  # Default
-        if context and hasattr(context, 'bot') and context.bot:
-            bot_username = context.bot.username or "your_bot"
-        
-        invite_link = f"https://t.me/{bot_username}?start=private_{game.id}"
+        # Calculate bots needed
+        bots_needed = 10 - players_count
         
         text = (
             f"✅ Сложность ботов: {difficulty_name}\n\n"
-            f"👥 Игроков: {players_count}/10\n\n"
-            f"📤 Пригласите друзей:\n"
-            f"1. Отправьте им ссылку:\n"
-            f"`{invite_link}`\n\n"
-            f"2. Или попросите их ввести команду:\n"
-            f"`/start private_{game.id}`\n\n"
-            f"Оставшиеся места будут заполнены ботами."
+            f"👥 Игроков: {players_count}/10\n"
+            f"🤖 Ботов будет добавлено: {bots_needed}\n\n"
+            f"Готовы начать игру?"
         )
         
         keyboard = [
@@ -168,8 +228,7 @@ async def handle_private_game_difficulty(update: Update, context, difficulty: st
         
         await query.edit_message_text(
             text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
 
@@ -345,8 +404,18 @@ async def handle_private_game_callback(update: Update, context, data: str) -> No
     param = parts[2]
     
     if action == "difficulty":
-        # Handle difficulty selection
-        await handle_private_game_difficulty(update, context, param)
+        # Handle difficulty selection: private:difficulty:game_id:difficulty
+        parts = param.split(":", 1)
+        if len(parts) == 2:
+            try:
+                game_id = int(parts[0])
+                difficulty = parts[1]
+                await handle_private_game_difficulty(update, context, game_id, difficulty)
+            except ValueError:
+                logger.error(f"Invalid game_id or difficulty in callback: {param}")
+        else:
+            # Legacy format: private:difficulty:difficulty (without game_id)
+            await handle_private_game_difficulty(update, context, 0, param)
     elif action == "start":
         # Handle start game
         try:
