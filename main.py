@@ -80,9 +80,9 @@ async def help_command(update: Update, context) -> None:
 async def message_handler(update: Update, context) -> None:
     """Handle text messages."""
     # Check if this is a UsersShared update (friends selection)
-    if update.message and update.message.users_shared:
+    if update.message and hasattr(update.message, 'user_shared') and update.message.user_shared:
         from bot.private_game import handle_private_game_users_selected
-        await handle_private_game_users_selected(update, context, update.message.users_shared)
+        await handle_private_game_users_selected(update, context, update.message.user_shared)
         return
     
     text = update.message.text

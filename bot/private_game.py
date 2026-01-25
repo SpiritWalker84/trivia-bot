@@ -67,7 +67,17 @@ async def handle_private_game_users_selected(update: Update, context, users_shar
     user_id = user.id
     
     # Get selected users
-    selected_users = users_shared.users
+    # users_shared can be UserShared object or dict-like
+    if hasattr(users_shared, 'users'):
+        selected_users = users_shared.users
+    elif hasattr(users_shared, 'user_ids'):
+        # If it's a single user_shared, convert to list
+        selected_users = [users_shared]
+    elif isinstance(users_shared, list):
+        selected_users = users_shared
+    else:
+        selected_users = []
+    
     if not selected_users:
         await update.message.reply_text("❌ Не выбрано ни одного друга. Попробуйте снова.")
         return
