@@ -12,10 +12,12 @@ echo "1. Live bot logs (tail -f)"
 echo "2. Last 100 lines"
 echo "3. Search for errors"
 echo "4. Search for user_shared events"
-echo "5. Search for specific text"
+echo "5. Search for invitation/notification sending"
+echo "6. Search for private game events"
+echo "7. Search for specific text"
 echo ""
 
-read -p "Enter choice [1-5]: " choice
+read -p "Enter choice [1-7]: " choice
 
 case $choice in
     1)
@@ -32,9 +34,22 @@ case $choice in
         ;;
     4)
         echo "Searching for user_shared events..."
-        grep -i "user_shared\|Processing user_shared\|Received user_shared" "$LOG_FILE" | tail -n 50
+        echo "=== Processing user_shared ==="
+        grep -i "Processing user_shared\|Received user_shared\|user_shared\|Extracted selected_user_id" "$LOG_FILE" | tail -n 50
         ;;
     5)
+        echo "Searching for invitation/notification sending..."
+        echo "=== Attempting to send invitation ==="
+        grep -i "Attempting to send invitation\|Successfully sent invitation\|Failed to send notification\|send_message" "$LOG_FILE" | tail -n 50
+        echo ""
+        echo "=== Full context around invitation attempts ==="
+        grep -B 5 -A 5 -i "Attempting to send invitation\|Failed to send notification" "$LOG_FILE" | tail -n 100
+        ;;
+    6)
+        echo "Searching for private game events..."
+        grep -i "private game\|create_private_game\|handle_private_game" "$LOG_FILE" | tail -n 50
+        ;;
+    7)
         read -p "Enter search text: " search_text
         echo "Searching for: $search_text"
         grep -i "$search_text" "$LOG_FILE" | tail -n 50
