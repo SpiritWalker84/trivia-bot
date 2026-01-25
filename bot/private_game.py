@@ -314,9 +314,18 @@ async def handle_private_game_users_selected(update: Update, context, user_share
     if selected_user_id:
         try:
             creator_name = user.first_name or user.username or "Друг"
-            logger.info(f"Attempting to send invitation to user {selected_user_id} from creator {user_id} ({creator_name})")
+            logger.info(f"Attempting to send invitation to user {selected_user_id} (type: {type(selected_user_id)}) from creator {user_id} ({creator_name})")
+            logger.info(f"context.bot type: {type(context.bot)}")
+            logger.info(f"context.bot.bot type: {type(context.bot.bot) if hasattr(context.bot, 'bot') else 'N/A'}")
+            
+            # Validate selected_user_id is an integer
+            if not isinstance(selected_user_id, int):
+                logger.error(f"selected_user_id is not an integer: {selected_user_id} (type: {type(selected_user_id)})")
+                await update.message.reply_text("❌ Ошибка: неверный ID пользователя")
+                return
             
             # Use context.bot instead of creating a new Bot instance
+            logger.info(f"Calling context.bot.send_message(chat_id={selected_user_id}, text=...)")
             result = await context.bot.send_message(
                 chat_id=selected_user_id,
                 text=f"👋 {creator_name} пригласил вас в приватную игру!\n\n"
