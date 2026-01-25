@@ -298,6 +298,46 @@ class GameNotifications:
                         logger.error(f"Failed to send results to {result['telegram_id']}: {e}")
     
     @telegram_retry
+    async def send_round_pause_notification(
+        self,
+        game_id: int,
+        next_round_number: int
+    ) -> None:
+        """Send pause notification before next round."""
+        with db_session() as session:
+            game = session.query(Game).filter(Game.id == game_id).first()
+            if not game:
+                return
+            
+            # Get all alive players
+            alive_players = [
+                gp for gp in game.players
+                if not gp.is_eliminated
+            ]
+            
+            pause_text = (
+                f"⏸️ Пауза между раундами\n\n"
+                f"Следующий раунд ({next_round_number}/{self.config.ROUNDS_PER_GAME}) "
+                f"начнется через 1 минуту.\n"
+                f"У вас есть время, чтобы посмотреть результаты."
+            )
+            
+            # Send to all alive players
+            for game_player in alive_players:
+                if game_player.is_bot:
+                    continue
+                
+                user = session.query(User).filter(User.id == game_player.user_id).first()
+                if user and user.telegram_id:
+                    try:
+                        await self.bot.send_message(
+                            chat_id=user.telegram_id,
+                            text=pause_text
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send pause notification to {user.telegram_id}: {e}")
+    
+    @telegram_retry
     async def send_vote_message(
         self,
         game_id: int,
