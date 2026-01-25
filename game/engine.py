@@ -81,13 +81,22 @@ class GameEngine:
         
         logger.info(f"Found {len(questions)} unused questions for game {game_id}, need {self.config.QUESTIONS_PER_ROUND}")
         
-        if len(questions) < self.config.QUESTIONS_PER_ROUND:
-            # Not enough questions - cancel game or use what we have
-            logger.error(f"Not enough questions for round {round_number} in game {game_id}: found {len(questions)}, need {self.config.QUESTIONS_PER_ROUND}")
+        if len(questions) == 0:
+            # No questions available - cannot create round
+            logger.error(f"No questions available for round {round_number} in game {game_id}")
             return None
         
-        # Create round questions
-        for i, question in enumerate(questions[:self.config.QUESTIONS_PER_ROUND], 1):
+        if len(questions) < self.config.QUESTIONS_PER_ROUND:
+            # Not enough questions - use what we have and warn
+            logger.warning(
+                f"Not enough questions for round {round_number} in game {game_id}: "
+                f"found {len(questions)}, need {self.config.QUESTIONS_PER_ROUND}. "
+                f"Using {len(questions)} questions instead."
+            )
+        
+        # Create round questions (use available questions, even if less than needed)
+        questions_to_use = questions[:min(len(questions), self.config.QUESTIONS_PER_ROUND)]
+        for i, question in enumerate(questions_to_use, 1):
             round_question = RoundQuestion(
                 round_id=round_obj.id,
                 question_id=question.id,
