@@ -102,16 +102,6 @@ def update_question_timer(
             f"❓ {question.question_text}\n\n"
         )
         
-        # Build options
-        if question.option_a:
-            question_text += f"A) {question.option_a}\n"
-        if question.option_b:
-            question_text += f"B) {question.option_b}\n"
-        if question.option_c:
-            question_text += f"C) {question.option_c}\n"
-        if question.option_d:
-            question_text += f"D) {question.option_d}\n"
-        
         # Visual progress bar
         total_bars = 20
         filled_bars = int((remaining / time_limit) * total_bars) if time_limit > 0 else 0
