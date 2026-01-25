@@ -80,12 +80,26 @@ async def help_command(update: Update, context) -> None:
 async def message_handler(update: Update, context) -> None:
     """Handle text messages."""
     # Check if this is a UsersShared update (friends selection)
-    if update.message and hasattr(update.message, 'user_shared') and update.message.user_shared:
-        from bot.private_game import handle_private_game_users_selected
-        await handle_private_game_users_selected(update, context, update.message.user_shared)
-        return
+    # user_shared is set when user selects a contact via request_user button
+    if update.message:
+        # Check for user_shared attribute
+        if hasattr(update.message, 'user_shared') and update.message.user_shared:
+            logger.info(f"Received user_shared update: {update.message.user_shared}, type: {type(update.message.user_shared)}")
+            from bot.private_game import handle_private_game_users_selected
+            await handle_private_game_users_selected(update, context, update.message.user_shared)
+            return
+        
+        # Also check if message text is None (might indicate a special update)
+        if update.message.text is None and hasattr(update.message, 'user_shared') and update.message.user_shared:
+            logger.info(f"Message with no text but user_shared: {update.message.user_shared}")
+            from bot.private_game import handle_private_game_users_selected
+            await handle_private_game_users_selected(update, context, update.message.user_shared)
+            return
     
-    text = update.message.text
+    text = update.message.text if update.message else None
+    if not text:
+        logger.warning(f"Message handler received update with no text: {update}")
+        return
     
     if text == "🏃 БЫСТРАЯ ИГРА":
         await handle_quick_game(update, context)
