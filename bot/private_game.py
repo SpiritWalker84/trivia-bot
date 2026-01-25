@@ -38,16 +38,15 @@ async def create_private_game(update: Update, context) -> None:
             existing_game.status = 'cancelled'
             session.commit()
     
-    # Request users selection using KeyboardButton.request_users
+    # Request users selection using KeyboardButton.request_user
     from telegram import ReplyKeyboardMarkup, KeyboardButton
     
+    # Note: request_user allows selecting one user at a time
+    # We'll need to handle multiple selections differently
     keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton(
             "👥 Выбрать друзей",
-            request_users=KeyboardButton.RequestUsers(
-                request_id=1,
-                max_quantity=9  # Max 9 friends (creator is 10th)
-            )
+            request_user=True
         )]],
         one_time_keyboard=True,
         resize_keyboard=True
@@ -56,34 +55,186 @@ async def create_private_game(update: Update, context) -> None:
     await update.message.reply_text(
         "👥 Создание приватной игры\n\n"
         "📱 Нажмите кнопку ниже, чтобы выбрать друзей из контактов.\n"
-        "Можно выбрать до 9 друзей. Оставшиеся места заполнятся ботами.",
+        "Можно выбрать до 9 друзей (по одному). Оставшиеся места заполнятся ботами.",
         reply_markup=keyboard
     )
 
 
-async def handle_private_game_users_selected(update: Update, context, users_shared) -> None:
-    """Handle when user selects friends from contacts."""
+async def handle_private_game_create_with_friends(update: Update, context) -> None:
+    """Create game with selected friends."""
+    query = update.callback_query
+    await query.answer()
+    
     user = update.effective_user
     user_id = user.id
     
-    # Get selected users
-    # users_shared can be UserShared object or dict-like
-    if hasattr(users_shared, 'users'):
-        selected_users = users_shared.users
-    elif hasattr(users_shared, 'user_ids'):
-        # If it's a single user_shared, convert to list
-        selected_users = [users_shared]
-    elif isinstance(users_shared, list):
-        selected_users = users_shared
-    else:
-        selected_users = []
+    # Get selected friends from context
+    selected_friend_ids = context.user_data.get('selected_friends', [])
     
-    if not selected_users:
-        await update.message.reply_text("❌ Не выбрано ни одного друга. Попробуйте снова.")
+    if not selected_friend_ids:
+        await query.edit_message_text("❌ Не выбрано ни одного друга.")
         return
     
     # Limit to 9 friends (creator is 10th)
-    selected_users = selected_users[:9]
+    selected_friend_ids = selected_friend_ids[:9]
+    
+    with db_session() as session:
+        # Get or create creator user
+        db_creator = UserQueries.get_or_create_user(
+            session,
+            telegram_id=user_id,
+            username=user.username,
+            full_name=f"{user.first_name} {user.last_name or ''}".strip()
+        )
+        
+        # Create new private game
+        game = GameQueries.create_game(
+            session,
+            game_type='private',
+            creator_id=db_creator.id,
+            total_rounds=10
+        )
+        
+        # Add creator as first player
+        creator_player = GamePlayer(
+            game_id=game.id,
+            user_id=db_creator.id,
+            is_bot=False,
+            join_order=1
+        )
+        session.add(creator_player)
+        
+        # Add selected friends by their telegram IDs
+        join_order = 2
+        added_count = 0
+        for friend_telegram_id in selected_friend_ids:
+            # Get or create user in database by telegram_id
+            db_user = UserQueries.get_or_create_user(
+                session,
+                telegram_id=friend_telegram_id,
+                username=None,  # Will be updated if user exists
+                full_name=None
+            )
+            
+            # Check if already added (shouldn't happen, but just in case)
+            existing = session.query(GamePlayer).filter(
+                GamePlayer.game_id == game.id,
+                GamePlayer.user_id == db_user.id
+            ).first()
+            
+            if not existing:
+                friend_player = GamePlayer(
+                    game_id=game.id,
+                    user_id=db_user.id,
+                    is_bot=False,
+                    join_order=join_order
+                )
+                session.add(friend_player)
+                added_count += 1
+                join_order += 1
+        
+        session.commit()
+        
+        logger.info(f"Created private game {game.id} by user {user_id} with {added_count} friends")
+    
+    # Clear selected friends from context
+    context.user_data.pop('selected_friends', None)
+    
+    # Ask for bot difficulty
+    keyboard = [
+        [
+            InlineKeyboardButton("Новичок", callback_data=f"private:difficulty:{game.id}:novice"),
+            InlineKeyboardButton("Любитель", callback_data=f"private:difficulty:{game.id}:amateur"),
+            InlineKeyboardButton("Эксперт", callback_data=f"private:difficulty:{game.id}:expert")
+        ]
+    ]
+    
+    await query.edit_message_text(
+        f"✅ Игра создана!\n\n"
+        f"👥 Добавлено друзей: {added_count}\n\n"
+        f"🤖 Выберите сложность ботов для заполнения оставшихся мест:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def handle_private_game_users_selected(update: Update, context, user_shared) -> None:
+    """Handle when user selects a friend from contacts."""
+    user = update.effective_user
+    user_id = user.id
+    
+    # Get selected user - request_user returns a single UserShared object
+    # Extract user information
+    if hasattr(user_shared, 'user_id'):
+        selected_user_id = user_shared.user_id
+    elif hasattr(user_shared, 'id'):
+        selected_user_id = user_shared.id
+    elif isinstance(user_shared, dict):
+        selected_user_id = user_shared.get('user_id') or user_shared.get('id')
+    else:
+        await update.message.reply_text("❌ Ошибка при получении данных друга.")
+        return
+    
+    if not selected_user_id:
+        await update.message.reply_text("❌ Не удалось определить выбранного друга.")
+        return
+    
+    # Store selected user in context for accumulation
+    if 'selected_friends' not in context.user_data:
+        context.user_data['selected_friends'] = []
+    
+    # Check if user already selected
+    if selected_user_id in context.user_data['selected_friends']:
+        await update.message.reply_text("❌ Этот друг уже выбран.")
+        return
+    
+    # Add to selected friends
+    context.user_data['selected_friends'].append(selected_user_id)
+    
+    # Get user info from Telegram API if available
+    selected_user = None
+    if hasattr(user_shared, 'first_name'):
+        selected_user = user_shared
+    elif hasattr(user_shared, 'user'):
+        selected_user = user_shared.user
+    
+    selected_count = len(context.user_data['selected_friends'])
+    
+    # Show current selection
+    friends_text = f"✅ Выбрано друзей: {selected_count}/9\n\n"
+    if selected_user:
+        name = selected_user.first_name or selected_user.username or f"ID{selected_user_id}"
+        friends_text += f"Последний добавленный: {name}\n\n"
+    
+    friends_text += "Продолжайте выбирать друзей или нажмите 'Готово' для создания игры."
+    
+    # Create keyboard with "Done" button
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "✅ Готово, создать игру",
+                callback_data="private:create_with_friends"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "👥 Добавить ещё друга",
+                request_user=True
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "❌ Отменить",
+                callback_data="private:cancel_selection"
+            )
+        ]
+    ]
+    
+    await update.message.reply_text(
+        friends_text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
     
     with db_session() as session:
         # Get or create creator user
