@@ -2,7 +2,7 @@
 Private game handlers and logic.
 """
 from typing import Optional, List
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, UsersShared
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from database.session import db_session
 from database.queries import UserQueries, GameQueries
 from database.models import Game, GamePlayer
