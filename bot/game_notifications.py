@@ -82,7 +82,24 @@ class GameNotifications:
                 options
             )
             
-            # Send message
+            # Remove main menu keyboard when sending first question
+            from telegram import ReplyKeyboardRemove
+            
+            # Check if this is the first question of the game (round 1, question 1)
+            is_first_question = (round_number == 1 and question_number == 1)
+            
+            # Remove keyboard before sending first question
+            if is_first_question:
+                try:
+                    await self.bot.send_message(
+                        chat_id=user_id,
+                        text="🎮 Игра началась!",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to remove keyboard for user {user_id}: {e}")
+            
+            # Send question message
             message = await self.bot.send_message(
                 chat_id=user_id,
                 text=question_text,
@@ -386,9 +403,17 @@ class GameNotifications:
                     continue
                 
                 try:
+                    # Check if this is the last round (game finished)
+                    is_last_round = (round_number == self.config.ROUNDS_PER_GAME)
+                    
+                    # Restore main menu keyboard after game ends
+                    from bot.keyboards import MainMenuKeyboard
+                    reply_markup = MainMenuKeyboard.get_keyboard() if is_last_round else None
+                    
                     await self.bot.send_message(
                         chat_id=result['telegram_id'],
-                        text=results_text
+                        text=results_text,
+                        reply_markup=reply_markup
                     )
                 except Exception as e:
                     logger.error(f"Failed to send results to {result['telegram_id']}: {e}")
@@ -579,6 +604,9 @@ class GameNotifications:
                 f"Игра завершена досрочно!"
             )
             
+            # Restore main menu keyboard after game ends
+            from bot.keyboards import MainMenuKeyboard
+            
             for game_player in game.players:
                 if game_player.is_bot:
                     continue
@@ -588,7 +616,8 @@ class GameNotifications:
                     try:
                         await self.bot.send_message(
                             chat_id=user.telegram_id,
-                            text=message_text
+                            text=message_text,
+                            reply_markup=MainMenuKeyboard.get_keyboard()
                         )
                     except Exception as e:
                         logger.error(f"Failed to send early victory notification to {user.telegram_id}: {e}")
