@@ -182,13 +182,29 @@ async def handle_private_game_users_selected(update: Update, context, user_share
     # Extract user information
     logger.info(f"Processing user_shared: {user_shared}, type: {type(user_shared)}")
     
+    # Log all attributes for debugging
+    if hasattr(user_shared, '__dict__'):
+        logger.info(f"user_shared.__dict__: {user_shared.__dict__}")
+    if hasattr(user_shared, '__slots__'):
+        logger.info(f"user_shared.__slots__: {user_shared.__slots__}")
+    
+    # Try to get all possible attributes
+    attrs_to_check = ['user_id', 'id', 'user', 'telegram_id', 'request_id']
+    for attr in attrs_to_check:
+        if hasattr(user_shared, attr):
+            value = getattr(user_shared, attr)
+            logger.info(f"user_shared.{attr} = {value} (type: {type(value)})")
+    
     selected_user_id = None
     if hasattr(user_shared, 'user_id'):
         selected_user_id = user_shared.user_id
+        logger.info(f"Found user_id via user_shared.user_id: {selected_user_id}")
     elif hasattr(user_shared, 'id'):
         selected_user_id = user_shared.id
+        logger.info(f"Found user_id via user_shared.id: {selected_user_id}")
     elif isinstance(user_shared, dict):
         selected_user_id = user_shared.get('user_id') or user_shared.get('id')
+        logger.info(f"Found user_id from dict: {selected_user_id}")
     else:
         # Try to get user_id from any attribute
         for attr in ['user_id', 'id', 'user', 'telegram_id']:
@@ -196,12 +212,14 @@ async def handle_private_game_users_selected(update: Update, context, user_share
                 value = getattr(user_shared, attr)
                 if isinstance(value, int):
                     selected_user_id = value
+                    logger.info(f"Found user_id via {attr} (int): {selected_user_id}")
                     break
                 elif hasattr(value, 'id'):
                     selected_user_id = value.id
+                    logger.info(f"Found user_id via {attr}.id: {selected_user_id}")
                     break
     
-    logger.info(f"Extracted selected_user_id: {selected_user_id}")
+    logger.info(f"Final extracted selected_user_id: {selected_user_id}")
     
     if not selected_user_id:
         logger.error(f"Could not extract user_id from user_shared: {user_shared}")
@@ -293,35 +311,43 @@ async def handle_private_game_users_selected(update: Update, context, user_share
     )
     
     # Send notification to selected friend
-    try:
-        from telegram import Bot
-        import config
-        bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
-        
-        creator_name = user.first_name or user.username or "Друг"
-        await bot.send_message(
-            chat_id=selected_user_id,
-            text=f"👋 {creator_name} пригласил вас в приватную игру!\n\n"
-                 f"Игра будет создана после того, как создатель выберет всех друзей и начнёт игру."
-        )
-        logger.info(f"Sent invitation notification to user {selected_user_id}")
-    except Exception as e:
-        logger.error(f"Failed to send notification to user {selected_user_id}: {e}")
-        # Get or create creator user
-        db_creator = UserQueries.get_or_create_user(
-            session,
-            telegram_id=user_id,
-            username=user.username,
-            full_name=f"{user.first_name} {user.last_name or ''}".strip()
-        )
-        
-        # Create new private game
-        game = GameQueries.create_game(
-            session,
-            game_type='private',
-            creator_id=db_creator.id,
-            total_rounds=10
-        )
+    if selected_user_id:
+        try:
+            creator_name = user.first_name or user.username or "Друг"
+            logger.info(f"Attempting to send invitation to user {selected_user_id} from creator {user_id} ({creator_name})")
+            
+            # Use context.bot instead of creating a new Bot instance
+            result = await context.bot.send_message(
+                chat_id=selected_user_id,
+                text=f"👋 {creator_name} пригласил вас в приватную игру!\n\n"
+                     f"Игра будет создана после того, как создатель выберет всех друзей и начнёт игру."
+            )
+            logger.info(f"Successfully sent invitation notification to user {selected_user_id}. Message ID: {result.message_id}")
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Failed to send notification to user {selected_user_id}: {error_msg}", exc_info=True)
+            
+            # Check for specific Telegram API errors
+            if "Forbidden" in error_msg or "bot was blocked" in error_msg.lower():
+                logger.warning(f"User {selected_user_id} has blocked the bot or not started a conversation")
+                await update.message.reply_text(
+                    f"⚠️ Не удалось отправить приглашение пользователю.\n"
+                    f"Возможно, он не начал диалог с ботом или заблокировал бота."
+                )
+            elif "chat not found" in error_msg.lower():
+                logger.warning(f"Chat with user {selected_user_id} not found")
+                await update.message.reply_text(
+                    f"⚠️ Не удалось найти пользователя для отправки приглашения."
+                )
+            else:
+                # Log the full exception details for other errors
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                await update.message.reply_text(
+                    f"⚠️ Произошла ошибка при отправке приглашения. Друг всё равно добавлен в список."
+                )
+    else:
+        logger.error(f"Cannot send notification: selected_user_id is None or invalid")
         
 
 
