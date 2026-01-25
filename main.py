@@ -82,19 +82,22 @@ async def message_handler(update: Update, context) -> None:
     # Check if this is a UsersShared update (friends selection)
     # user_shared is set when user selects a contact via request_user button
     if update.message:
-        # Check for user_shared attribute
-        if hasattr(update.message, 'user_shared') and update.message.user_shared:
-            logger.info(f"Received user_shared update: {update.message.user_shared}, type: {type(update.message.user_shared)}")
+        # Check for user_shared attribute (use getattr to avoid AttributeError)
+        user_shared = getattr(update.message, 'user_shared', None)
+        if user_shared:
+            logger.info(f"Received user_shared update: {user_shared}, type: {type(user_shared)}")
             from bot.private_game import handle_private_game_users_selected
-            await handle_private_game_users_selected(update, context, update.message.user_shared)
+            await handle_private_game_users_selected(update, context, user_shared)
             return
         
         # Also check if message text is None (might indicate a special update)
-        if update.message.text is None and hasattr(update.message, 'user_shared') and update.message.user_shared:
-            logger.info(f"Message with no text but user_shared: {update.message.user_shared}")
-            from bot.private_game import handle_private_game_users_selected
-            await handle_private_game_users_selected(update, context, update.message.user_shared)
-            return
+        if update.message.text is None:
+            user_shared = getattr(update.message, 'user_shared', None)
+            if user_shared:
+                logger.info(f"Message with no text but user_shared: {user_shared}")
+                from bot.private_game import handle_private_game_users_selected
+                await handle_private_game_users_selected(update, context, user_shared)
+                return
     
     text = update.message.text if update.message else None
     if not text:
