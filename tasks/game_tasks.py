@@ -94,27 +94,6 @@ def finish_round_task(game_id: int, round_number: int) -> None:
     except Exception as e:
         logger.error(f"Failed to send round results: {e}", exc_info=True)
     
-    # Send pause notification if continuing to next round
-    with db_session() as session:
-        game = session.query(Game).filter(Game.id == game_id).first()
-        if not game:
-            logger.error(f"Game {game_id} not found after finishing round {round_number}")
-            return
-        
-        alive_count = len([gp for gp in game.players if not gp.is_eliminated])
-        
-        if alive_count > 1 and round_number < config.config.ROUNDS_PER_GAME:
-            # Send pause notification
-            try:
-                bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
-                notifications = GameNotifications(bot)
-                asyncio.run(notifications.send_round_pause_notification(
-                    game_id, round_number + 1
-                ))
-                logger.info(f"Pause notification sent for game {game_id}, next round {round_number + 1}")
-            except Exception as e:
-                logger.error(f"Failed to send pause notification: {e}", exc_info=True)
-    
     # Check if game should continue
     with db_session() as session:
         game = session.query(Game).filter(Game.id == game_id).first()
@@ -133,6 +112,19 @@ def finish_round_task(game_id: int, round_number: int) -> None:
             # Continue to next round after 60 second pause
             next_round = round_number + 1
             logger.info(f"Game {game_id}: Continuing to round {next_round} (current: {round_number}, max: {config.config.ROUNDS_PER_GAME}) after 60 second pause")
+            
+            # Send pause notification
+            try:
+                bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
+                notifications = GameNotifications(bot)
+                asyncio.run(notifications.send_round_pause_notification(
+                    game_id, next_round
+                ))
+                logger.info(f"Pause notification sent for game {game_id}, next round {next_round}")
+            except Exception as e:
+                logger.error(f"Failed to send pause notification: {e}", exc_info=True)
+            
+            # Schedule next round after 60 seconds
             start_next_round_task.apply_async(
                 args=[game_id, next_round],
                 countdown=60  # 1 minute pause to let players review results
