@@ -479,11 +479,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     # Handle UsersShared (friends selection) - must be before TEXT handler
-    try:
-        application.add_handler(MessageHandler(filters.StatusUpdate.USERS_SHARED, message_handler))
-    except AttributeError:
-        # Fallback if USERS_SHARED is not available in this version
-        logger.warning("USERS_SHARED filter not available, using TEXT handler fallback")
+    # Note: user_shared comes as a message with user_shared attribute, not as StatusUpdate
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     application.add_handler(CallbackQueryHandler(callback_query_handler))
     

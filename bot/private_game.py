@@ -17,6 +17,9 @@ async def create_private_game(update: Update, context) -> None:
     user = update.effective_user
     user_id = user.id
     
+    # Clear any previous selection state
+    context.user_data.pop('selected_friends', None)
+    
     with db_session() as session:
         # Get or create user
         db_user = UserQueries.get_or_create_user(
