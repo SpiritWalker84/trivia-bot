@@ -40,18 +40,30 @@ async def create_private_game(update: Update, context) -> None:
     
     # Request users selection using KeyboardButton.request_user
     from telegram import ReplyKeyboardMarkup, KeyboardButton
-    from telegram import KeyboardButtonRequestUser
+    try:
+        from telegram import KeyboardButtonRequestUser
+    except ImportError:
+        logger.warning("KeyboardButtonRequestUser not available")
+        KeyboardButtonRequestUser = None
     
     # Note: request_user allows selecting one user at a time
     # We'll need to handle multiple selections differently
-    keyboard = ReplyKeyboardMarkup(
-        [[KeyboardButton(
-            "👥 Выбрать друга",
-            request_user=KeyboardButtonRequestUser(request_id=1)
-        )]],
-        one_time_keyboard=True,
-        resize_keyboard=True
-    )
+    if KeyboardButtonRequestUser:
+        keyboard = ReplyKeyboardMarkup(
+            [[KeyboardButton(
+                "👥 Выбрать друга",
+                request_user=KeyboardButtonRequestUser(request_id=1)
+            )]],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+    else:
+        # Fallback - just show button without request_user
+        keyboard = ReplyKeyboardMarkup(
+            [[KeyboardButton("👥 Выбрать друга")]],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
     
     await update.message.reply_text(
         "👥 Создание приватной игры\n\n"
