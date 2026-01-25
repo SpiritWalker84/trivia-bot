@@ -165,6 +165,9 @@ async def handle_private_game_users_selected(update: Update, context, user_share
     
     # Get selected user - request_user returns a single UserShared object
     # Extract user information
+    logger.info(f"Processing user_shared: {user_shared}, type: {type(user_shared)}")
+    
+    selected_user_id = None
     if hasattr(user_shared, 'user_id'):
         selected_user_id = user_shared.user_id
     elif hasattr(user_shared, 'id'):
@@ -172,7 +175,22 @@ async def handle_private_game_users_selected(update: Update, context, user_share
     elif isinstance(user_shared, dict):
         selected_user_id = user_shared.get('user_id') or user_shared.get('id')
     else:
-        await update.message.reply_text("❌ Ошибка при получении данных друга.")
+        # Try to get user_id from any attribute
+        for attr in ['user_id', 'id', 'user', 'telegram_id']:
+            if hasattr(user_shared, attr):
+                value = getattr(user_shared, attr)
+                if isinstance(value, int):
+                    selected_user_id = value
+                    break
+                elif hasattr(value, 'id'):
+                    selected_user_id = value.id
+                    break
+    
+    logger.info(f"Extracted selected_user_id: {selected_user_id}")
+    
+    if not selected_user_id:
+        logger.error(f"Could not extract user_id from user_shared: {user_shared}")
+        await update.message.reply_text("❌ Ошибка при получении данных друга. Попробуйте снова.")
         return
     
     if not selected_user_id:
@@ -202,16 +220,27 @@ async def handle_private_game_users_selected(update: Update, context, user_share
     
     # Show current selection
     friends_text = f"✅ Выбрано друзей: {selected_count}/9\n\n"
-    if selected_user:
-        name = selected_user.first_name or selected_user.username or f"ID{selected_user_id}"
-        friends_text += f"Последний добавленный: {name}\n\n"
-    
+    friends_text += f"Друг добавлен! (ID: {selected_user_id})\n\n"
     friends_text += "Продолжайте выбирать друзей или нажмите 'Готово' для создания игры."
     
     # Create keyboard with "Done" button
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+    from telegram import KeyboardButtonRequestUser
     
-    keyboard = [
+    # Use ReplyKeyboardMarkup for request_user button
+    reply_keyboard = ReplyKeyboardMarkup(
+        [
+            [KeyboardButton(
+                "👥 Добавить ещё друга",
+                request_user=KeyboardButtonRequestUser(request_id=1)
+            )]
+        ],
+        one_time_keyboard=True,
+        resize_keyboard=True
+    )
+    
+    # Inline buttons for actions
+    inline_keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
                 "✅ Готово, создать игру",
@@ -220,24 +249,38 @@ async def handle_private_game_users_selected(update: Update, context, user_share
         ],
         [
             InlineKeyboardButton(
-                "👥 Добавить ещё друга",
-                request_user=True
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 "❌ Отменить",
                 callback_data="private:cancel_selection"
             )
         ]
-    ]
+    ])
     
     await update.message.reply_text(
         friends_text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=reply_keyboard
     )
     
-    with db_session() as session:
+    # Send inline buttons separately
+    await update.message.reply_text(
+        "Или используйте кнопки ниже:",
+        reply_markup=inline_keyboard
+    )
+    
+    # Send notification to selected friend
+    try:
+        from telegram import Bot
+        import config
+        bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
+        
+        creator_name = user.first_name or user.username or "Друг"
+        await bot.send_message(
+            chat_id=selected_user_id,
+            text=f"👋 {creator_name} пригласил вас в приватную игру!\n\n"
+                 f"Игра будет создана после того, как создатель выберет всех друзей и начнёт игру."
+        )
+        logger.info(f"Sent invitation notification to user {selected_user_id}")
+    except Exception as e:
+        logger.error(f"Failed to send notification to user {selected_user_id}: {e}")
         # Get or create creator user
         db_creator = UserQueries.get_or_create_user(
             session,
@@ -254,74 +297,6 @@ async def handle_private_game_users_selected(update: Update, context, user_share
             total_rounds=10
         )
         
-        # Add creator as first player
-        creator_player = GamePlayer(
-            game_id=game.id,
-            user_id=db_creator.id,
-            is_bot=False,
-            join_order=1
-        )
-        session.add(creator_player)
-        
-        # Add selected friends
-        join_order = 2
-        added_users = []
-        for tg_user in selected_users:
-            # Skip if user is a bot
-            if tg_user.is_bot:
-                continue
-            
-            # Get or create user in database
-            db_user = UserQueries.get_or_create_user(
-                session,
-                telegram_id=tg_user.id,
-                username=tg_user.username,
-                full_name=f"{tg_user.first_name} {tg_user.last_name or ''}".strip()
-            )
-            
-            # Check if already added (shouldn't happen, but just in case)
-            existing = session.query(GamePlayer).filter(
-                GamePlayer.game_id == game.id,
-                GamePlayer.user_id == db_user.id
-            ).first()
-            
-            if not existing:
-                friend_player = GamePlayer(
-                    game_id=game.id,
-                    user_id=db_user.id,
-                    is_bot=False,
-                    join_order=join_order
-                )
-                session.add(friend_player)
-                added_users.append(tg_user)
-                join_order += 1
-        
-        session.commit()
-        
-        logger.info(f"Created private game {game.id} by user {user_id} with {len(added_users)} friends")
-    
-    # Show selected friends
-    friends_text = "✅ Выбрано друзей: " + str(len(added_users))
-    if added_users:
-        friends_text += "\n\n👥 Друзья:\n"
-        for i, tg_user in enumerate(added_users, 1):
-            name = tg_user.first_name or tg_user.username or f"ID{tg_user.id}"
-            friends_text += f"{i}. {name}\n"
-    
-    # Ask for bot difficulty
-    keyboard = [
-        [
-            InlineKeyboardButton("Новичок", callback_data=f"private:difficulty:{game.id}:novice"),
-            InlineKeyboardButton("Любитель", callback_data=f"private:difficulty:{game.id}:amateur"),
-            InlineKeyboardButton("Эксперт", callback_data=f"private:difficulty:{game.id}:expert")
-        ]
-    ]
-    
-    await update.message.reply_text(
-        f"{friends_text}\n\n"
-        f"🤖 Выберите сложность ботов для заполнения оставшихся мест:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
 
 
 async def handle_private_game_difficulty(update: Update, context, game_id: int, difficulty: str) -> None:
