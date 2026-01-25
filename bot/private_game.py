@@ -526,16 +526,29 @@ async def handle_private_game_start(update: Update, context, game_id: int) -> No
         # Get current players
         players = GameQueries.get_game_players(session, game_id)
         players_count = len(players)
+        logger.info(f"Private game {game_id}: current players count = {players_count}")
         
         # Fill remaining slots with bots
         bots_needed = 10 - players_count
+        logger.info(f"Private game {game_id}: bots needed = {bots_needed}")
+        
         if bots_needed > 0:
             bot_difficulty = game.bot_difficulty or 'novice'  # Default to novice
+            logger.info(f"Private game {game_id}: requesting {bots_needed} bots with difficulty '{bot_difficulty}'")
+            
             bots = UserQueries.get_bots(session, difficulty=bot_difficulty, limit=bots_needed)
+            logger.info(f"Private game {game_id}: found {len(bots)} bots in database")
             
             if len(bots) < bots_needed:
-                logger.warning(f"Only {len(bots)} bots available, need {bots_needed}")
+                logger.warning(f"Private game {game_id}: Only {len(bots)} bots available, need {bots_needed}. Trying to get bots without difficulty filter...")
+                # Try to get bots without difficulty filter if not enough with specific difficulty
+                all_bots = UserQueries.get_bots(session, difficulty=None, limit=bots_needed)
+                logger.info(f"Private game {game_id}: found {len(all_bots)} bots total (without difficulty filter)")
+                # Use all available bots, prioritizing those with matching difficulty
+                bots = bots + [b for b in all_bots if b not in bots][:bots_needed - len(bots)]
+                logger.info(f"Private game {game_id}: using {len(bots)} bots total")
             
+            added_bots_count = 0
             for i, bot in enumerate(bots[:bots_needed], players_count + 1):
                 bot_player = GamePlayer(
                     game_id=game_id,
@@ -545,6 +558,12 @@ async def handle_private_game_start(update: Update, context, game_id: int) -> No
                     join_order=i
                 )
                 session.add(bot_player)
+                added_bots_count += 1
+                logger.info(f"Private game {game_id}: added bot {bot.id} (difficulty: {bot.bot_difficulty}) as player {i}")
+            
+            logger.info(f"Private game {game_id}: added {added_bots_count} bots, total players now: {players_count + added_bots_count}")
+        else:
+            logger.info(f"Private game {game_id}: no bots needed, already has {players_count} players")
         
         # Update game status
         game.status = 'pre_start'
