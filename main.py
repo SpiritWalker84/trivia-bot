@@ -19,9 +19,22 @@ async def start_command(update: Update, context) -> None:
     from database.session import db_session
     from database.queries import UserQueries
     from bot.keyboards import MainMenuKeyboard
+    from bot.private_game import handle_private_game_invite
     
     user = update.effective_user
     logger.info(f"User {user.id} ({user.username}) started the bot")
+    
+    # Check if there's a parameter (e.g., /start private_123)
+    args = context.args
+    if args and len(args) > 0:
+        param = args[0]
+        if param.startswith("private_"):
+            try:
+                game_id = int(param.split("_")[1])
+                await handle_private_game_invite(update, context, game_id)
+                return
+            except (ValueError, IndexError):
+                logger.warning(f"Invalid private game invite parameter: {param}")
     
     # Get or create user in database
     with db_session() as session:
@@ -129,10 +142,8 @@ async def handle_training(update: Update, context) -> None:
 
 async def handle_private_game(update: Update, context) -> None:
     """Handle private game button."""
-    await update.message.reply_text(
-        "👥 Приватная игра\n\n"
-        "Эта функция будет доступна в следующих версиях."
-    )
+    from bot.private_game import create_private_game
+    await create_private_game(update, context)
 
 
 async def handle_rating(update: Update, context) -> None:
@@ -213,6 +224,9 @@ async def callback_query_handler(update: Update, context) -> None:
         elif data.startswith("training:"):
             await query.answer()
             await handle_training_difficulty(update, context, data)
+        elif data.startswith("private:"):
+            await query.answer()
+            await handle_private_game_callback(update, context, data)
         elif data.startswith("elimination:"):
             await query.answer()
             await handle_elimination_choice(update, context, data)

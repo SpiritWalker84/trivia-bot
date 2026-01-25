@@ -149,6 +149,7 @@ class Game(Base, TimestampMixin):
     finished_at = Column(DateTime(timezone=True), nullable=True)
     last_error = Column(Text, nullable=True)
     last_error_at = Column(DateTime(timezone=True), nullable=True)
+    bot_difficulty = Column(String(20), nullable=True)  # 'novice', 'amateur', 'expert' - for private/training games
     
     # Relationships
     creator = relationship("User", back_populates="created_games", foreign_keys=[creator_id])

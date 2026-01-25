@@ -185,6 +185,10 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         else:
             # Last question in round - finish round
             from tasks.game_tasks import finish_round_task
+            from database.models import Round
             round_obj = session.query(Round).filter(Round.id == round_id).first()
             if round_obj:
+                logger.info(f"Round {round_obj.round_number} finished, starting elimination")
                 finish_round_task.delay(game_id, round_obj.round_number)
+            else:
+                logger.error(f"Round {round_id} not found when trying to finish round")
