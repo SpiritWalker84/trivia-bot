@@ -151,17 +151,20 @@ async def handle_private_game_create_with_friends(update: Update, context) -> No
         
         session.commit()
         
-        logger.info(f"Created private game {game.id} by user {user_id} with {added_count} friends")
+        # Save game.id before leaving the session context
+        game_id = game.id
+        
+        logger.info(f"Created private game {game_id} by user {user_id} with {added_count} friends")
     
     # Clear selected friends from context
     context.user_data.pop('selected_friends', None)
     
-    # Ask for bot difficulty
+    # Ask for bot difficulty (use game_id instead of game.id to avoid detached instance error)
     keyboard = [
         [
-            InlineKeyboardButton("Новичок", callback_data=f"private:difficulty:{game.id}:novice"),
-            InlineKeyboardButton("Любитель", callback_data=f"private:difficulty:{game.id}:amateur"),
-            InlineKeyboardButton("Эксперт", callback_data=f"private:difficulty:{game.id}:expert")
+            InlineKeyboardButton("Новичок", callback_data=f"private:difficulty:{game_id}:novice"),
+            InlineKeyboardButton("Любитель", callback_data=f"private:difficulty:{game_id}:amateur"),
+            InlineKeyboardButton("Эксперт", callback_data=f"private:difficulty:{game_id}:expert")
         ]
     ]
     
