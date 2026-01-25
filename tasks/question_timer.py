@@ -82,17 +82,6 @@ def update_question_timer(
             logger.debug(f"RoundQuestion {round_question_id} not found, stopping timer")
             return
         
-        # Check if next question already exists (question expired, next one sent)
-        next_question = session.query(RoundQuestion).filter(
-            RoundQuestion.round_id == round_id,
-            RoundQuestion.question_number == rq.question_number + 1
-        ).first()
-        
-        if next_question:
-            # Next question already sent, stop this timer
-            logger.debug(f"Next question already sent (question_number={next_question.question_number}), stopping timer for round_question_id={round_question_id}")
-            return
-        
         question = session.query(Question).filter(Question.id == rq.question_id).first()
         if not question:
             logger.debug(f"Question not found for round_question_id={round_question_id}, stopping timer")
@@ -101,11 +90,6 @@ def update_question_timer(
         round_obj = session.query(Round).filter(Round.id == round_id).first()
         if not round_obj:
             logger.debug(f"Round {round_id} not found, stopping timer")
-            return
-        
-        # Check if round is still in progress
-        if round_obj.status != 'in_progress':
-            logger.debug(f"Round {round_id} status is {round_obj.status}, stopping timer")
             return
         
         # Rebuild question text
@@ -160,25 +144,10 @@ def update_question_timer(
         logger.warning(f"Could not update timer message: {e}", exc_info=True)
         # Don't return - continue scheduling next update
     
-    # Schedule next update if time remaining and question is still active
+    # Schedule next update if time remaining
     if remaining > 1:
-        # Double-check that question is still active before scheduling next update
+        # Check if question is still active before scheduling next update
         with db_session() as session:
-            rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question_id).first()
-            if not rq:
-                logger.debug(f"RoundQuestion {round_question_id} no longer exists, stopping timer")
-                return
-            
-            # Check if next question already exists
-            next_question = session.query(RoundQuestion).filter(
-                RoundQuestion.round_id == round_id,
-                RoundQuestion.question_number == rq.question_number + 1
-            ).first()
-            
-            if next_question:
-                logger.debug(f"Next question already sent, stopping timer for round_question_id={round_question_id}")
-                return
-            
             # Check if user answered
             existing_answer = session.query(Answer).filter(
                 Answer.round_question_id == round_question_id,
@@ -188,6 +157,19 @@ def update_question_timer(
             if existing_answer:
                 logger.debug(f"User {user_id} answered, stopping timer")
                 return
+            
+            # Check if next question was already displayed (sent to players)
+            rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question_id).first()
+            if rq:
+                next_question = session.query(RoundQuestion).filter(
+                    RoundQuestion.round_id == round_id,
+                    RoundQuestion.question_number == rq.question_number + 1,
+                    RoundQuestion.displayed_at.isnot(None)  # Next question was already sent
+                ).first()
+                
+                if next_question:
+                    logger.debug(f"Next question already displayed (question_number={next_question.question_number}), stopping timer for round_question_id={round_question_id}")
+                    return
         
         # Schedule next update
         update_question_timer.apply_async(
