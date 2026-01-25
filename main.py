@@ -77,27 +77,28 @@ async def help_command(update: Update, context) -> None:
     await update.message.reply_text(help_text)
 
 
+async def user_shared_handler(update: Update, context) -> None:
+    """Handle user_shared updates (when user selects a contact via request_user button)."""
+    if not update.message:
+        return
+    
+    # Check for user_shared attribute (use getattr to avoid AttributeError)
+    user_shared = getattr(update.message, 'user_shared', None)
+    if user_shared:
+        logger.info(f"Received user_shared update: {user_shared}, type: {type(user_shared)}")
+        logger.info(f"Full update.message: {update.message}")
+        logger.info(f"update.message attributes: {dir(update.message)}")
+        from bot.private_game import handle_private_game_users_selected
+        await handle_private_game_users_selected(update, context, user_shared)
+        return
+    else:
+        logger.debug(f"Message received but no user_shared attribute. Message type: {type(update.message)}")
+
+
 async def message_handler(update: Update, context) -> None:
     """Handle text messages."""
-    # Check if this is a UsersShared update (friends selection)
-    # user_shared is set when user selects a contact via request_user button
-    if update.message:
-        # Check for user_shared attribute (use getattr to avoid AttributeError)
-        user_shared = getattr(update.message, 'user_shared', None)
-        if user_shared:
-            logger.info(f"Received user_shared update: {user_shared}, type: {type(user_shared)}")
-            from bot.private_game import handle_private_game_users_selected
-            await handle_private_game_users_selected(update, context, user_shared)
-            return
-        
-        # Also check if message text is None (might indicate a special update)
-        if update.message.text is None:
-            user_shared = getattr(update.message, 'user_shared', None)
-            if user_shared:
-                logger.info(f"Message with no text but user_shared: {user_shared}")
-                from bot.private_game import handle_private_game_users_selected
-                await handle_private_game_users_selected(update, context, user_shared)
-                return
+    # This handler only processes text messages
+    # user_shared is handled by user_shared_handler
     
     text = update.message.text if update.message else None
     if not text:
@@ -497,9 +498,15 @@ def main() -> None:
     # Register handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
-    # Handle UsersShared (friends selection) - must be before TEXT handler
-    # Note: user_shared comes as a message with user_shared attribute, not as StatusUpdate
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    
+    # Handle user_shared (friends selection) - must be before TEXT handler
+    # This handler catches ALL messages to check for user_shared attribute
+    # It must be registered before the TEXT handler to catch user_shared updates first
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, user_shared_handler), group=0)
+    
+    # Handle text messages (after user_shared check)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler), group=1)
+    
     application.add_handler(CallbackQueryHandler(callback_query_handler))
     
     # Start bot
