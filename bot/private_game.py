@@ -61,7 +61,7 @@ async def create_private_game(update: Update, context) -> None:
     )
 
 
-async def handle_private_game_users_selected(update: Update, context, users_shared: UsersShared) -> None:
+async def handle_private_game_users_selected(update: Update, context, users_shared) -> None:
     """Handle when user selects friends from contacts."""
     user = update.effective_user
     user_id = user.id
