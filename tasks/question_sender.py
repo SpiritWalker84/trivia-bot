@@ -36,9 +36,6 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
         bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
         notifications = GameNotifications(bot)
         
-        # Record start time before sending questions
-        question_start_time = datetime.now(pytz.UTC)
-        
         # Send question to all players (async, but we're in sync context)
         import asyncio
         results = asyncio.run(
@@ -54,19 +51,34 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
             countdown=1  # Small delay to let question be sent first
         )
         
-        # Calculate delay: time from question start + time limit + 1 second buffer
-        # This ensures timer reaches 0 before next question is sent
-        elapsed = (datetime.now(pytz.UTC) - question_start_time).total_seconds()
-        remaining_time = max(0, config.config.QUESTION_TIME_LIMIT - elapsed)
-        # Add 1 second buffer to ensure timer reaches 0 and stops
-        delay = int(remaining_time) + 1
+        # Get displayed_at time to calculate exact delay
+        # Wait a bit for displayed_at to be set
+        import time
+        time.sleep(0.5)  # Small delay to ensure displayed_at is set
+        
+        with db_session() as session:
+            round_question = session.query(RoundQuestion).filter(
+                RoundQuestion.id == round_question_id
+            ).first()
+            
+            if round_question and round_question.displayed_at:
+                # Calculate exact delay from displayed_at
+                elapsed = (datetime.now(pytz.UTC) - round_question.displayed_at).total_seconds()
+                remaining_time = max(0, config.config.QUESTION_TIME_LIMIT - elapsed)
+                # Add 3 second buffer to ensure timer reaches 0 and all updates complete
+                delay = int(remaining_time) + 3
+                logger.info(f"Using displayed_at for timing: elapsed={elapsed:.2f}s, remaining={remaining_time:.2f}s, delay={delay}s")
+            else:
+                # Fallback: use full time limit + 3 second buffer
+                delay = config.config.QUESTION_TIME_LIMIT + 3
+                logger.warning(f"displayed_at not set for question {round_question_id}, using fallback delay {delay}s")
         
         # Schedule answer collection after time limit (with buffer to let timer reach 0)
         collect_answers.apply_async(
             args=[game_id, round_id, round_question_id],
             countdown=delay
         )
-        logger.info(f"Scheduled collect_answers for question {round_question_id} with delay {delay} seconds (elapsed: {elapsed:.2f}s)")
+        logger.info(f"Scheduled collect_answers for question {round_question_id} with delay {delay} seconds")
         
         logger.info(f"Question {round_question_id} sent to players in game {game_id}")
         
