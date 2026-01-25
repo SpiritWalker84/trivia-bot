@@ -61,18 +61,29 @@ class GameEngine:
         theme_id: Optional[int] = None
     ) -> Optional[Round]:
         """Create a new round with questions."""
+        from utils.logging import get_logger
+        logger = get_logger(__name__)
+        
         # Create round
         round_obj = RoundQueries.create_round(
             session, game_id, round_number, theme_id
         )
+        if not round_obj:
+            logger.error(f"Failed to create round object for game {game_id}, round {round_number}")
+            return None
+        
+        logger.info(f"Round object created: game_id={game_id}, round_number={round_number}, round_id={round_obj.id}")
         
         # Select questions for this round
         questions = QuestionQueries.get_unused_questions_for_game(
             session, game_id, theme_id, limit=self.config.QUESTIONS_PER_ROUND
         )
         
+        logger.info(f"Found {len(questions)} unused questions for game {game_id}, need {self.config.QUESTIONS_PER_ROUND}")
+        
         if len(questions) < self.config.QUESTIONS_PER_ROUND:
             # Not enough questions - cancel game or use what we have
+            logger.error(f"Not enough questions for round {round_number} in game {game_id}: found {len(questions)}, need {self.config.QUESTIONS_PER_ROUND}")
             return None
         
         # Create round questions

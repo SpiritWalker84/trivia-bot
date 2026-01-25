@@ -3,7 +3,7 @@ Database query helpers - common database operations.
 """
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, desc, asc
+from sqlalchemy import and_, or_, func, desc, asc, select
 from database.models import (
     User,
     Game,
@@ -175,16 +175,16 @@ class QuestionQueries:
         limit: int = 10
     ) -> List[Question]:
         """Get questions not yet used in the game."""
-        # Get used question IDs
-        used_ids = (
-            session.query(GameUsedQuestion.question_id)
-            .filter(GameUsedQuestion.game_id == game_id)
+        # Get used question IDs - use select() explicitly to avoid warning
+        used_ids_subquery = (
+            select(GameUsedQuestion.question_id)
+            .where(GameUsedQuestion.game_id == game_id)
             .subquery()
         )
         
         query = session.query(Question).filter(
             and_(
-                Question.id.notin_(used_ids),
+                Question.id.notin_(select(used_ids_subquery.c.question_id)),
                 Question.is_approved == True
             )
         )
@@ -233,17 +233,25 @@ class RoundQueries:
         parent_round_id: Optional[int] = None
     ) -> Round:
         """Create a new round."""
-        round_obj = Round(
-            game_id=game_id,
-            round_number=round_number,
-            theme_id=theme_id,
-            status='not_started',
-            is_tie_break=is_tie_break,
-            parent_round_id=parent_round_id
-        )
-        session.add(round_obj)
-        session.flush()
-        return round_obj
+        from utils.logging import get_logger
+        logger = get_logger(__name__)
+        
+        try:
+            round_obj = Round(
+                game_id=game_id,
+                round_number=round_number,
+                theme_id=theme_id,
+                status='not_started',
+                is_tie_break=is_tie_break,
+                parent_round_id=parent_round_id
+            )
+            session.add(round_obj)
+            session.flush()
+            logger.info(f"Round created successfully: game_id={game_id}, round_number={round_number}, round_id={round_obj.id}")
+            return round_obj
+        except Exception as e:
+            logger.error(f"Error creating round for game {game_id}, round {round_number}: {e}", exc_info=True)
+            raise
     
     @staticmethod
     def get_round_by_number(session: Session, game_id: int, round_number: int) -> Optional[Round]:
