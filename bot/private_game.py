@@ -40,13 +40,14 @@ async def create_private_game(update: Update, context) -> None:
     
     # Request users selection using KeyboardButton.request_user
     from telegram import ReplyKeyboardMarkup, KeyboardButton
+    from telegram import KeyboardButtonRequestUser
     
     # Note: request_user allows selecting one user at a time
     # We'll need to handle multiple selections differently
     keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton(
-            "👥 Выбрать друзей",
-            request_user=True
+            "👥 Выбрать друга",
+            request_user=KeyboardButtonRequestUser(request_id=1)
         )]],
         one_time_keyboard=True,
         resize_keyboard=True
