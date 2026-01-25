@@ -193,10 +193,6 @@ async def handle_private_game_users_selected(update: Update, context, user_share
         await update.message.reply_text("❌ Ошибка при получении данных друга. Попробуйте снова.")
         return
     
-    if not selected_user_id:
-        await update.message.reply_text("❌ Не удалось определить выбранного друга.")
-        return
-    
     # Store selected user in context for accumulation
     if 'selected_friends' not in context.user_data:
         context.user_data['selected_friends'] = []
@@ -225,19 +221,34 @@ async def handle_private_game_users_selected(update: Update, context, user_share
     
     # Create keyboard with "Done" button
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-    from telegram import KeyboardButtonRequestUser
+    try:
+        from telegram import KeyboardButtonRequestUser
+    except ImportError:
+        # Fallback if KeyboardButtonRequestUser doesn't exist
+        logger.warning("KeyboardButtonRequestUser not available, using alternative")
+        KeyboardButtonRequestUser = None
     
     # Use ReplyKeyboardMarkup for request_user button
-    reply_keyboard = ReplyKeyboardMarkup(
-        [
-            [KeyboardButton(
-                "👥 Добавить ещё друга",
-                request_user=KeyboardButtonRequestUser(request_id=1)
-            )]
-        ],
-        one_time_keyboard=True,
-        resize_keyboard=True
-    )
+    if KeyboardButtonRequestUser:
+        reply_keyboard = ReplyKeyboardMarkup(
+            [
+                [KeyboardButton(
+                    "👥 Добавить ещё друга",
+                    request_user=KeyboardButtonRequestUser(request_id=1)
+                )]
+            ],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+    else:
+        # Fallback if KeyboardButtonRequestUser is not available
+        reply_keyboard = ReplyKeyboardMarkup(
+            [
+                [KeyboardButton("👥 Добавить ещё друга")]
+            ],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
     
     # Inline buttons for actions
     inline_keyboard = InlineKeyboardMarkup([
