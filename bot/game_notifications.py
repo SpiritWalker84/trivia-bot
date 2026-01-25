@@ -58,23 +58,16 @@ class GameNotifications:
                 f"❓ {question.question_text}\n\n"
             )
             
-            # Build options
+            # Build options (only for keyboard, not in text)
             options = {}
-            options_text = ""
             if question.option_a:
                 options['A'] = question.option_a
-                options_text += f"A) {question.option_a}\n"
             if question.option_b:
                 options['B'] = question.option_b
-                options_text += f"B) {question.option_b}\n"
             if question.option_c:
                 options['C'] = question.option_c
-                options_text += f"C) {question.option_c}\n"
             if question.option_d:
                 options['D'] = question.option_d
-                options_text += f"D) {question.option_d}\n"
-            
-            question_text += options_text
             
             # Visual progress bar for timer
             time_limit = self.config.QUESTION_TIME_LIMIT

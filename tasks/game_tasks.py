@@ -109,10 +109,13 @@ def finish_round_task(game_id: int, round_number: int) -> None:
             logger.info(f"Game {game_id}: Only {alive_count} player(s) alive, finishing game")
             finish_game_task.delay(game_id)
         elif round_number < config.config.ROUNDS_PER_GAME:
-            # Continue to next round
+            # Continue to next round after 60 second pause
             next_round = round_number + 1
-            logger.info(f"Game {game_id}: Continuing to round {next_round} (current: {round_number}, max: {config.config.ROUNDS_PER_GAME})")
-            start_next_round_task.delay(game_id, next_round)
+            logger.info(f"Game {game_id}: Continuing to round {next_round} (current: {round_number}, max: {config.config.ROUNDS_PER_GAME}) after 60 second pause")
+            start_next_round_task.apply_async(
+                args=[game_id, next_round],
+                countdown=60  # 1 minute pause to let players review results
+            )
         else:
             # Last round finished
             logger.info(f"Game {game_id}: Last round ({round_number}) finished, finishing game")
