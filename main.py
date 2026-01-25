@@ -19,7 +19,7 @@ async def start_command(update: Update, context) -> None:
     from database.session import db_session
     from database.queries import UserQueries
     from bot.keyboards import MainMenuKeyboard
-    from bot.private_game import handle_private_game_invite
+    from bot.private_game import handle_private_game_invite, handle_private_game_callback
     
     user = update.effective_user
     logger.info(f"User {user.id} ({user.username}) started the bot")

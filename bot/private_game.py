@@ -331,3 +331,35 @@ async def handle_private_game_cancel(update: Update, context, game_id: int) -> N
     
     await query.answer("Игра отменена")
     await query.edit_message_text("❌ Игра отменена")
+
+
+async def handle_private_game_callback(update: Update, context, data: str) -> None:
+    """Route private game callbacks to appropriate handlers."""
+    # Parse callback data: private:action:param
+    parts = data.split(":", 2)
+    if len(parts) < 3:
+        logger.warning(f"Invalid private game callback data: {data}")
+        return
+    
+    action = parts[1]
+    param = parts[2]
+    
+    if action == "difficulty":
+        # Handle difficulty selection
+        await handle_private_game_difficulty(update, context, param)
+    elif action == "start":
+        # Handle start game
+        try:
+            game_id = int(param)
+            await handle_private_game_start(update, context, game_id)
+        except ValueError:
+            logger.error(f"Invalid game_id in callback: {param}")
+    elif action == "cancel":
+        # Handle cancel game
+        try:
+            game_id = int(param)
+            await handle_private_game_cancel(update, context, game_id)
+        except ValueError:
+            logger.error(f"Invalid game_id in callback: {param}")
+    else:
+        logger.warning(f"Unknown private game action: {action}")
