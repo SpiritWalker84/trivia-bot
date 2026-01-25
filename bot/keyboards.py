@@ -82,6 +82,29 @@ class TrainingDifficultyKeyboard:
         return InlineKeyboardMarkup(keyboard)
 
 
+class EliminationChoiceKeyboard:
+    """Keyboard for eliminated player to choose spectator or leave."""
+    
+    @staticmethod
+    def get_keyboard(game_id: int, user_id: int) -> InlineKeyboardMarkup:
+        """Get elimination choice keyboard."""
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "👁️ Остаться зрителем",
+                    callback_data=f"elimination:spectator:{game_id}:{user_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🚪 Выйти из игры",
+                    callback_data=f"elimination:leave:{game_id}:{user_id}"
+                )
+            ]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+
+
 class AdminKeyboard:
     """Admin keyboard."""
     

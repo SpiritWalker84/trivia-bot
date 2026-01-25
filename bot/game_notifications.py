@@ -140,6 +140,68 @@ class GameNotifications:
             return False
     
     @telegram_retry
+    async def send_question_to_spectator(
+        self,
+        user_id: int,
+        round_question: RoundQuestion,
+        question: Question,
+        round_number: int,
+        question_number: int,
+        theme_name: Optional[str] = None
+    ) -> bool:
+        """
+        Send question to spectator (eliminated player who chose to watch).
+        Question is sent without answer buttons.
+        
+        Args:
+            user_id: Telegram user ID
+            round_question: RoundQuestion object
+            question: Question object
+            round_number: Round number
+            question_number: Question number in round
+            theme_name: Optional theme name
+        
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        try:
+            # Build question text
+            theme_text = f" | Тема: {theme_name}" if theme_name else ""
+            question_text = (
+                f"👁️ ЗРИТЕЛЬ\n"
+                f"🏁 Раунд {round_number}/{self.config.ROUNDS_PER_GAME}{theme_text}\n"
+                f"Вопрос {question_number}/{self.config.QUESTIONS_PER_ROUND}:\n\n"
+                f"❓ {question.question_text}\n\n"
+            )
+            
+            # Add options text (for viewing only)
+            if question.option_a:
+                question_text += f"A) {question.option_a}\n"
+            if question.option_b:
+                question_text += f"B) {question.option_b}\n"
+            if question.option_c:
+                question_text += f"C) {question.option_c}\n"
+            if question.option_d:
+                question_text += f"D) {question.option_d}\n"
+            
+            question_text += "\n👁️ Вы наблюдаете за игрой"
+            
+            # Send message without keyboard (no answer buttons)
+            await self.bot.send_message(
+                chat_id=user_id,
+                text=question_text
+            )
+            
+            return True
+            
+        except TelegramError as e:
+            logger.error(f"Failed to send question to spectator {user_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending question to spectator {user_id}: {e}")
+            return False
+    
+    @telegram_retry
     async def send_question_to_all_players(
         self,
         game_id: int,
@@ -181,13 +243,18 @@ class GameNotifications:
                 if theme:
                     theme_name = theme.name
             
-            # Get alive players
+            # Get alive players and spectators
             alive_players = [
                 gp for gp in game.players
                 if not gp.is_eliminated
             ]
+            spectators = [
+                gp for gp in game.players
+                if gp.is_eliminated and gp.is_spectator is True and not gp.left_game
+            ]
             
             results = {}
+            # Send to alive players (with answer buttons)
             for game_player in alive_players:
                 # Skip bots (they answer automatically)
                 if game_player.is_bot:
@@ -199,6 +266,25 @@ class GameNotifications:
                     continue
                 
                 success = await self.send_question_to_player(
+                    user.telegram_id,
+                    round_question,
+                    question,
+                    round_obj.round_number,
+                    round_question.question_number,
+                    theme_name
+                )
+                results[user.telegram_id] = success
+            
+            # Send to spectators (without answer buttons)
+            for game_player in spectators:
+                if game_player.is_bot:
+                    continue
+                
+                user = session.query(User).filter(User.id == game_player.user_id).first()
+                if not user or not user.telegram_id:
+                    continue
+                
+                success = await self.send_question_to_spectator(
                     user.telegram_id,
                     round_question,
                     question,
@@ -286,16 +372,55 @@ class GameNotifications:
                 if eliminated:
                     results_text += f"\n🚫 Выбывает: {eliminated['username']}"
             
-            # Send to all players
+            # Send to all players (alive, spectators, but not those who left)
             for result in results:
-                if result['telegram_id']:
-                    try:
-                        await self.bot.send_message(
-                            chat_id=result['telegram_id'],
-                            text=results_text
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to send results to {result['telegram_id']}: {e}")
+                if not result['telegram_id']:
+                    continue
+                
+                # Skip players who left the game
+                game_player = next(
+                    (gp for gp in all_players if gp.user_id == result['user_id']),
+                    None
+                )
+                if game_player and game_player.left_game:
+                    continue
+                
+                try:
+                    await self.bot.send_message(
+                        chat_id=result['telegram_id'],
+                        text=results_text
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send results to {result['telegram_id']}: {e}")
+            
+            # Send elimination choice message to eliminated player (if not already spectator or left)
+            if eliminated_user_id:
+                eliminated_player = next(
+                    (gp for gp in all_players if gp.user_id == eliminated_user_id),
+                    None
+                )
+                if eliminated_player and not eliminated_player.is_bot:
+                    # Check if player already made a choice
+                    if eliminated_player.is_spectator is None and not eliminated_player.left_game:
+                        eliminated_user = session.query(User).filter(
+                            User.id == eliminated_user_id
+                        ).first()
+                        if eliminated_user and eliminated_user.telegram_id:
+                            from bot.keyboards import EliminationChoiceKeyboard
+                            choice_text = (
+                                "🚫 Вы выбыли из игры!\n\n"
+                                "Что вы хотите сделать?"
+                            )
+                            try:
+                                await self.bot.send_message(
+                                    chat_id=eliminated_user.telegram_id,
+                                    text=choice_text,
+                                    reply_markup=EliminationChoiceKeyboard.get_keyboard(
+                                        game_id, eliminated_user_id
+                                    )
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to send elimination choice to {eliminated_user.telegram_id}: {e}")
     
     @telegram_retry
     async def send_round_pause_notification(
@@ -309,10 +434,14 @@ class GameNotifications:
             if not game:
                 return
             
-            # Get all alive players
+            # Get all alive players and spectators
             alive_players = [
                 gp for gp in game.players
                 if not gp.is_eliminated
+            ]
+            spectators = [
+                gp for gp in game.players
+                if gp.is_eliminated and gp.is_spectator is True and not gp.left_game
             ]
             
             pause_text = (
@@ -336,6 +465,21 @@ class GameNotifications:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send pause notification to {user.telegram_id}: {e}")
+            
+            # Send to spectators
+            for game_player in spectators:
+                if game_player.is_bot:
+                    continue
+                
+                user = session.query(User).filter(User.id == game_player.user_id).first()
+                if user and user.telegram_id:
+                    try:
+                        await self.bot.send_message(
+                            chat_id=user.telegram_id,
+                            text=pause_text
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send pause notification to spectator {user.telegram_id}: {e}")
     
     @telegram_retry
     async def send_vote_message(
@@ -393,6 +537,10 @@ class GameNotifications:
             
             for game_player in players:
                 if game_player.is_bot:
+                    continue
+                
+                # Skip players who left the game
+                if game_player.left_game:
                     continue
                 
                 user = session.query(User).filter(User.id == game_player.user_id).first()

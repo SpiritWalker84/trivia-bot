@@ -213,6 +213,9 @@ async def callback_query_handler(update: Update, context) -> None:
         elif data.startswith("training:"):
             await query.answer()
             await handle_training_difficulty(update, context, data)
+        elif data.startswith("elimination:"):
+            await query.answer()
+            await handle_elimination_choice(update, context, data)
         elif data.startswith("admin:"):
             await query.answer()
             await handle_admin(update, context, data)
@@ -271,6 +274,74 @@ async def handle_answer(update: Update, context, data: str) -> None:
         return
     
     await handle_answer_action(update, context, round_question_id, selected_option)
+
+
+async def handle_elimination_choice(update: Update, context, data: str) -> None:
+    """Handle elimination choice callback (spectator or leave)."""
+    from database.session import db_session
+    from database.models import GamePlayer, User
+    
+    query = update.callback_query
+    user = update.effective_user
+    
+    # Parse callback data: elimination:spectator:123:456 or elimination:leave:123:456
+    parts = data.split(":")
+    if len(parts) != 4:
+        await query.answer("Ошибка в данных", show_alert=True)
+        return
+    
+    choice = parts[1]  # 'spectator' or 'leave'
+    try:
+        game_id = int(parts[2])
+        user_id = int(parts[3])
+    except ValueError:
+        await query.answer("Ошибка: неверный ID", show_alert=True)
+        return
+    
+    # Verify that this is the correct user
+    with db_session() as session:
+        db_user = session.query(User).filter(User.telegram_id == user.id).first()
+        if not db_user or db_user.id != user_id:
+            await query.answer("Ошибка: неверный пользователь", show_alert=True)
+            return
+        
+        game_player = session.query(GamePlayer).filter(
+            GamePlayer.game_id == game_id,
+            GamePlayer.user_id == user_id
+        ).first()
+        
+        if not game_player:
+            await query.answer("Ошибка: игрок не найден", show_alert=True)
+            return
+        
+        if not game_player.is_eliminated:
+            await query.answer("Вы еще не выбыли из игры", show_alert=True)
+            return
+        
+        if game_player.left_game:
+            await query.answer("Вы уже вышли из игры", show_alert=True)
+            return
+        
+        # Update player status
+        if choice == "spectator":
+            game_player.is_spectator = True
+            await query.message.edit_text(
+                "✅ Вы остались зрителем!\n\n"
+                "Вы будете видеть вопросы и результаты раундов, но не сможете отвечать."
+            )
+        elif choice == "leave":
+            game_player.is_spectator = False
+            game_player.left_game = True
+            await query.message.edit_text(
+                "👋 Вы вышли из игры.\n\n"
+                "Вы больше не будете получать уведомления об этой игре."
+            )
+        else:
+            await query.answer("Неизвестный выбор", show_alert=True)
+            return
+        
+        session.commit()
+        logger.info(f"Player {user_id} chose {choice} for game {game_id}")
 
 
 async def handle_training_difficulty(update: Update, context, data: str) -> None:

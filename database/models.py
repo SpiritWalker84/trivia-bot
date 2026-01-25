@@ -188,6 +188,8 @@ class GamePlayer(Base, TimestampMixin):
     is_eliminated = Column(Boolean, nullable=False, default=False)
     eliminated_round = Column(Integer, nullable=True)
     final_place = Column(Integer, nullable=True)
+    is_spectator = Column(Boolean, nullable=True, default=None)  # None = not eliminated, True = spectator, False = left game
+    left_game = Column(Boolean, nullable=False, default=False)  # True if player chose to leave
     
     # Relationships
     game = relationship("Game", back_populates="players")
