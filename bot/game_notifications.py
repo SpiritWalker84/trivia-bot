@@ -797,3 +797,100 @@ class GameNotifications:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send early victory notification to {user.telegram_id}: {e}")
+    
+    @telegram_retry
+    async def send_game_final_results(
+        self,
+        game_id: int
+    ) -> None:
+        """Send final game results and winner notification."""
+        with db_session() as session:
+            game = session.query(Game).filter(Game.id == game_id).first()
+            if not game:
+                return
+            
+            # Get winner (player with final_place = 1)
+            winner_player = next(
+                (gp for gp in game.players if gp.final_place == 1),
+                None
+            )
+            
+            if not winner_player:
+                logger.warning(f"No winner found for game {game_id}")
+                return
+            
+            winner_user = session.query(User).filter(User.id == winner_player.user_id).first()
+            if not winner_user:
+                logger.warning(f"Winner user not found for game {game_id}, user_id={winner_player.user_id}")
+                return
+            
+            winner_name = winner_user.full_name or winner_user.username or "Победитель"
+            
+            # Get all players sorted by final place
+            all_players = sorted(
+                [gp for gp in game.players if gp.final_place is not None],
+                key=lambda p: p.final_place
+            )
+            
+            # Build final results message
+            results_lines = [
+                "🏆 **ИГРА ЗАВЕРШЕНА!**\n",
+                f"🥇 **Победитель: {winner_name}**\n",
+                "📊 **Финальные результаты:**\n"
+            ]
+            
+            # Add top 10 players
+            for i, game_player in enumerate(all_players[:10], 1):
+                user = session.query(User).filter(User.id == game_player.user_id).first()
+                if not user:
+                    continue
+                
+                player_name = user.full_name or user.username or f"Игрок {user.id}"
+                medal = ""
+                if i == 1:
+                    medal = "🥇"
+                elif i == 2:
+                    medal = "🥈"
+                elif i == 3:
+                    medal = "🥉"
+                
+                bot_marker = "🤖 " if game_player.is_bot else ""
+                results_lines.append(
+                    f"{medal} {i}. {bot_marker}{player_name} - {game_player.total_score} ✅"
+                )
+            
+            # Add current player position if not in top 10
+            final_message = "\n".join(results_lines)
+            
+            # Restore main menu keyboard after game ends
+            from bot.keyboards import MainMenuKeyboard
+            
+            # Send to all players
+            for game_player in game.players:
+                if game_player.is_bot:
+                    continue
+                
+                user = session.query(User).filter(User.id == game_player.user_id).first()
+                if user and user.telegram_id:
+                    try:
+                        # Highlight winner message
+                        if game_player.user_id == winner_player.user_id:
+                            winner_message = (
+                                "🎉 **ПОЗДРАВЛЯЕМ! ВЫ ПОБЕДИЛИ!** 🎉\n\n"
+                                f"{final_message}"
+                            )
+                            await self.bot.send_message(
+                                chat_id=user.telegram_id,
+                                text=winner_message,
+                                reply_markup=MainMenuKeyboard.get_keyboard(),
+                                parse_mode="Markdown"
+                            )
+                        else:
+                            await self.bot.send_message(
+                                chat_id=user.telegram_id,
+                                text=final_message,
+                                reply_markup=MainMenuKeyboard.get_keyboard(),
+                                parse_mode="Markdown"
+                            )
+                    except Exception as e:
+                        logger.error(f"Failed to send final results to {user.telegram_id}: {e}")

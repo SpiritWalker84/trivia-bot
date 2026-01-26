@@ -353,5 +353,14 @@ def finish_game_task(game_id: int) -> None:
     game_engine = GameEngine()
     if game_engine.finish_game(game_id):
         logger.info(f"Game {game_id} finished successfully")
+        
+        # Send final results and winner notification
+        try:
+            bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
+            notifications = GameNotifications(bot)
+            asyncio.run(notifications.send_game_final_results(game_id))
+            logger.info(f"Final results sent for game {game_id}")
+        except Exception as e:
+            logger.error(f"Failed to send final results for game {game_id}: {e}", exc_info=True)
     else:
         logger.error(f"Failed to finish game {game_id}")

@@ -52,7 +52,7 @@ class Config:
     TIE_BREAK_TIME_LIMIT: int = int(os.getenv("TIE_BREAK_TIME_LIMIT", "20"))  # seconds
     
     # Game Settings
-    ROUNDS_PER_GAME: int = int(os.getenv("ROUNDS_PER_GAME", "10"))
+    ROUNDS_PER_GAME: int = int(os.getenv("ROUNDS_PER_GAME", "9"))
     QUESTIONS_PER_ROUND: int = int(os.getenv("QUESTIONS_PER_ROUND", "10"))
     PLAYERS_PER_GAME: int = int(os.getenv("PLAYERS_PER_GAME", "10"))
     MIN_PLAYERS_FOR_QUICK_START: int = int(os.getenv("MIN_PLAYERS_FOR_QUICK_START", "10"))
