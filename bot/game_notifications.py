@@ -277,6 +277,8 @@ class GameNotifications:
         Returns:
             Dict mapping user_id to success status
         """
+        logger.info(f"[SEND_TO_ALL] Starting send_question_to_all_players: game_id={game_id}, round_id={round_id}, round_question_id={round_question_id}")
+        
         with db_session() as session:
             game = session.query(Game).filter(Game.id == game_id).first()
             if not game:

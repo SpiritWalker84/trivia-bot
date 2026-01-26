@@ -36,6 +36,8 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
         bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
         notifications = GameNotifications(bot)
         
+        logger.info(f"[QUESTION_SENDER] Calling send_question_to_all_players for game_id={game_id}, round_id={round_id}, round_question_id={round_question_id}")
+        
         # Send question to all players (async, but we're in sync context)
         import asyncio
         results = asyncio.run(
@@ -43,6 +45,8 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
                 game_id, round_id, round_question_id
             )
         )
+        
+        logger.info(f"[QUESTION_SENDER] send_question_to_all_players completed, results={results}")
         
         # Process bot answers (with small delay)
         from tasks.bot_answers import process_bot_answers
