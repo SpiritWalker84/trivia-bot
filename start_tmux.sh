@@ -121,9 +121,12 @@ start_tmux_session() {
     tmux new-session -d -s "$TMUX_SESSION" -x 200 -y 50 \
         "source $VENV_ACTIVATE && python main.py"
     
+    # Create logs directory if it doesn't exist
+    mkdir -p "$SCRIPT_DIR/logs"
+    
     # Split window horizontally (creates 2 panes)
     tmux split-window -h -t "$TMUX_SESSION" \
-        "source $VENV_ACTIVATE && celery -A tasks.celery_app worker --loglevel=info"
+        "source $VENV_ACTIVATE && celery -A tasks.celery_app worker --loglevel=info --logfile=$SCRIPT_DIR/logs/celery_worker.log"
     
     # Split the right pane vertically (creates 3 panes)
     tmux split-window -v -t "$TMUX_SESSION" \
