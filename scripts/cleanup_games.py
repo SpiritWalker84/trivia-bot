@@ -52,9 +52,29 @@ def cleanup_all_games():
         session.commit()
         logger.info(f"Updated {len(active_games)} games to cancelled status")
     
-    # Cancel all Celery tasks
+    # Cancel all Celery tasks and clear Redis queues
     try:
         from tasks.celery_app import celery_app
+        
+        # First, try to purge all Celery queues in Redis
+        logger.info("Purging Celery queues in Redis...")
+        try:
+            # Get all queue names from Celery config
+            broker_url = config.config.CELERY_BROKER_URL
+            logger.info(f"Broker URL: {broker_url}")
+            
+            # Purge all queues
+            purged = celery_app.control.purge()
+            if purged:
+                logger.info(f"Purged {sum(purged.values())} tasks from Celery queues")
+                for worker, count in purged.items():
+                    if count > 0:
+                        logger.info(f"  Worker {worker}: purged {count} tasks")
+            else:
+                logger.info("No tasks found in Celery queues to purge")
+        except Exception as e:
+            logger.warning(f"Failed to purge Celery queues: {e}")
+            logger.info("This is normal if Celery is not running or Redis is not accessible")
         
         # Get active tasks
         inspect = celery_app.control.inspect()
@@ -63,7 +83,7 @@ def cleanup_all_games():
         active_workers = inspect.active()
         if active_workers is None:
             logger.warning("No Celery workers available or Celery is not running")
-            logger.info("To cancel tasks, make sure Celery worker is running")
+            logger.info("Tasks in Redis queues have been purged. Workers will not process old tasks when restarted.")
         else:
             # Get active tasks
             active_tasks = inspect.active()
@@ -104,9 +124,65 @@ def cleanup_all_games():
             else:
                 logger.info("No scheduled Celery tasks found")
             
+            # Also check reserved tasks
+            reserved_tasks = inspect.reserved()
+            if reserved_tasks:
+                logger.info("Found reserved Celery tasks:")
+                for worker, tasks in reserved_tasks.items():
+                    logger.info(f"  Worker {worker}: {len(tasks)} reserved tasks")
+                    for task in tasks:
+                        task_id = task.get('id')
+                        task_name = task.get('name')
+                        if task_id:
+                            try:
+                                celery_app.control.revoke(task_id, terminate=True)
+                                logger.info(f"      Revoked reserved task {task_id} ({task_name})")
+                            except Exception as e:
+                                logger.warning(f"      Failed to revoke reserved task {task_id}: {e}")
+            else:
+                logger.info("No reserved Celery tasks found")
+            
     except Exception as e:
         logger.error(f"Error canceling Celery tasks: {e}", exc_info=True)
-        logger.info("Note: This is normal if Celery is not running. Tasks will be cleaned up when Celery restarts.")
+        logger.info("Note: This is normal if Celery is not running. Tasks in Redis have been purged.")
+    
+    # Also clear Redis directly as a fallback
+    try:
+        import redis
+        from urllib.parse import urlparse
+        
+        broker_url = config.config.CELERY_BROKER_URL
+        parsed = urlparse(broker_url)
+        
+        # Connect to Redis
+        redis_client = redis.from_url(broker_url, decode_responses=False)
+        
+        # Get all keys related to Celery
+        celery_keys = redis_client.keys('celery*')
+        if celery_keys:
+            logger.info(f"Found {len(celery_keys)} Celery-related keys in Redis")
+            # Delete all Celery keys
+            for key in celery_keys:
+                redis_client.delete(key)
+            logger.info("Cleared all Celery keys from Redis")
+        else:
+            logger.info("No Celery keys found in Redis")
+            
+        # Also clear the default queue
+        try:
+            queue_name = celery_app.conf.task_default_queue
+            queue_key = f"{queue_name}"
+            # Try to get queue length
+            queue_length = redis_client.llen(queue_key)
+            if queue_length > 0:
+                redis_client.delete(queue_key)
+                logger.info(f"Cleared queue '{queue_name}' ({queue_length} tasks)")
+        except Exception as e:
+            logger.debug(f"Could not clear default queue: {e}")
+            
+    except Exception as e:
+        logger.warning(f"Could not clear Redis directly: {e}")
+        logger.info("This is normal if Redis is not accessible or Celery uses a different broker")
     
     logger.info("Game cleanup completed!")
 
