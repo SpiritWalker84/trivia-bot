@@ -55,50 +55,58 @@ def cleanup_all_games():
     # Cancel all Celery tasks
     try:
         from tasks.celery_app import celery_app
-        from celery import current_app
         
         # Get active tasks
         inspect = celery_app.control.inspect()
-        active_tasks = inspect.active()
         
-        if active_tasks:
-            logger.info("Found active Celery tasks:")
-            for worker, tasks in active_tasks.items():
-                logger.info(f"  Worker {worker}: {len(tasks)} tasks")
-                for task in tasks:
-                    task_id = task.get('id')
-                    task_name = task.get('name')
-                    logger.info(f"    - {task_name} (id: {task_id})")
-                    
-                    # Try to revoke the task
-                    try:
-                        celery_app.control.revoke(task_id, terminate=True)
-                        logger.info(f"      Revoked task {task_id}")
-                    except Exception as e:
-                        logger.warning(f"      Failed to revoke task {task_id}: {e}")
+        # Check if Celery workers are available
+        active_workers = inspect.active()
+        if active_workers is None:
+            logger.warning("No Celery workers available or Celery is not running")
+            logger.info("To cancel tasks, make sure Celery worker is running")
         else:
-            logger.info("No active Celery tasks found")
-        
-        # Also revoke scheduled tasks
-        scheduled_tasks = inspect.scheduled()
-        if scheduled_tasks:
-            logger.info("Found scheduled Celery tasks:")
-            for worker, tasks in scheduled_tasks.items():
-                logger.info(f"  Worker {worker}: {len(tasks)} scheduled tasks")
-                for task in tasks:
-                    task_id = task.get('request', {}).get('id')
-                    task_name = task.get('request', {}).get('task')
-                    if task_id:
+            # Get active tasks
+            active_tasks = inspect.active()
+            
+            if active_tasks:
+                logger.info("Found active Celery tasks:")
+                for worker, tasks in active_tasks.items():
+                    logger.info(f"  Worker {worker}: {len(tasks)} tasks")
+                    for task in tasks:
+                        task_id = task.get('id')
+                        task_name = task.get('name')
+                        logger.info(f"    - {task_name} (id: {task_id})")
+                        
+                        # Try to revoke the task
                         try:
                             celery_app.control.revoke(task_id, terminate=True)
-                            logger.info(f"      Revoked scheduled task {task_id} ({task_name})")
+                            logger.info(f"      Revoked task {task_id}")
                         except Exception as e:
-                            logger.warning(f"      Failed to revoke scheduled task {task_id}: {e}")
-        else:
-            logger.info("No scheduled Celery tasks found")
+                            logger.warning(f"      Failed to revoke task {task_id}: {e}")
+            else:
+                logger.info("No active Celery tasks found")
+            
+            # Also revoke scheduled tasks
+            scheduled_tasks = inspect.scheduled()
+            if scheduled_tasks:
+                logger.info("Found scheduled Celery tasks:")
+                for worker, tasks in scheduled_tasks.items():
+                    logger.info(f"  Worker {worker}: {len(tasks)} scheduled tasks")
+                    for task in tasks:
+                        task_id = task.get('request', {}).get('id')
+                        task_name = task.get('request', {}).get('task')
+                        if task_id:
+                            try:
+                                celery_app.control.revoke(task_id, terminate=True)
+                                logger.info(f"      Revoked scheduled task {task_id} ({task_name})")
+                            except Exception as e:
+                                logger.warning(f"      Failed to revoke scheduled task {task_id}: {e}")
+            else:
+                logger.info("No scheduled Celery tasks found")
             
     except Exception as e:
         logger.error(f"Error canceling Celery tasks: {e}", exc_info=True)
+        logger.info("Note: This is normal if Celery is not running. Tasks will be cleaned up when Celery restarts.")
     
     logger.info("Game cleanup completed!")
 
