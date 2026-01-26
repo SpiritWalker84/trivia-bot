@@ -36,6 +36,9 @@ def cleanup_all_games():
             # Update game status to cancelled
             game.status = 'cancelled'
             
+            # Reset current_round to prevent continuation
+            game.current_round = None
+            
             # Get all rounds for this game
             rounds = session.query(Round).filter(Round.game_id == game.id).all()
             logger.info(f"  Found {len(rounds)} rounds for game {game.id}")
