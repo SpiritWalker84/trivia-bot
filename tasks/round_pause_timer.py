@@ -87,6 +87,26 @@ def update_round_pause_timer(
             logger.debug(f"Round {next_round} already exists and is in_progress, stopping pause timer")
             return
     
+    # Double-check before updating message (race condition protection)
+    with db_session() as session:
+        game = session.query(Game).filter(Game.id == game_id).first()
+        if not game or game.status != 'in_progress':
+            logger.debug(f"Game {game_id} is not in_progress before message update, stopping pause timer")
+            return
+        
+        if game.current_round and game.current_round >= next_round:
+            logger.debug(f"Round {next_round} has already started before message update (current_round={game.current_round}), stopping pause timer")
+            return
+        
+        round_obj = session.query(Round).filter(
+            Round.game_id == game_id,
+            Round.round_number == next_round
+        ).first()
+        
+        if round_obj and round_obj.status == 'in_progress':
+            logger.debug(f"Round {next_round} already exists and is in_progress before message update, stopping pause timer")
+            return
+    
     # Build pause message with timer
     pause_text = (
         f"⏸️ Пауза между раундами\n\n"
