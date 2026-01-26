@@ -62,12 +62,12 @@ class Config:
     BOT_MIN_RESPONSE_DELAY: int = int(os.getenv("BOT_MIN_RESPONSE_DELAY", "3"))
     BOT_MAX_RESPONSE_DELAY: int = int(os.getenv("BOT_MAX_RESPONSE_DELAY", "15"))
     # Bot accuracy: probability of answering correctly (0.0 to 1.0)
-    # NOVICE: 25% - новички часто ошибаются
-    # AMATEUR: 50% - средний уровень
-    # EXPERT: 75% - эксперты отвечают хорошо, но не идеально
-    BOT_NOVICE_ACCURACY: float = float(os.getenv("BOT_NOVICE_ACCURACY", "0.25"))
-    BOT_AMATEUR_ACCURACY: float = float(os.getenv("BOT_AMATEUR_ACCURACY", "0.50"))
-    BOT_EXPERT_ACCURACY: float = float(os.getenv("BOT_EXPERT_ACCURACY", "0.75"))
+    # NOVICE: 55% - новички отвечают правильно 4-6 из 10 вопросов
+    # AMATEUR: 68% - любители отвечают правильно 6-8 из 10 вопросов
+    # EXPERT: 80% - эксперты отвечают правильно 7-9 из 10 вопросов
+    BOT_NOVICE_ACCURACY: float = float(os.getenv("BOT_NOVICE_ACCURACY", "0.55"))
+    BOT_AMATEUR_ACCURACY: float = float(os.getenv("BOT_AMATEUR_ACCURACY", "0.68"))
+    BOT_EXPERT_ACCURACY: float = float(os.getenv("BOT_EXPERT_ACCURACY", "0.80"))
     
     # Rating System
     RATING_WINNER_BONUS: int = int(os.getenv("RATING_WINNER_BONUS", "20"))
