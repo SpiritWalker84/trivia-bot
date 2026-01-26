@@ -66,7 +66,8 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
                 elapsed = (datetime.now(pytz.UTC) - round_question.displayed_at).total_seconds()
                 remaining_time = max(0, config.config.QUESTION_TIME_LIMIT - elapsed)
                 # Add 3 second buffer to ensure timer reaches 0 and all updates complete
-                delay = int(remaining_time) + 3
+                # Ensure minimum delay of at least QUESTION_TIME_LIMIT seconds
+                delay = max(int(remaining_time) + 3, config.config.QUESTION_TIME_LIMIT + 3)
                 logger.info(f"Using displayed_at for timing: elapsed={elapsed:.2f}s, remaining={remaining_time:.2f}s, delay={delay}s")
             else:
                 # Fallback: use full time limit + 3 second buffer

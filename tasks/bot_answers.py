@@ -181,14 +181,18 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         ).first()
         
         if next_question:
-            # Send next question
-            send_question_to_players.delay(game_id, round_id, next_question.id)
+            # Send next question with a small delay to ensure previous question processing is complete
+            # This prevents questions from being sent too quickly
+            send_question_to_players.apply_async(
+                args=[game_id, round_id, next_question.id],
+                countdown=2  # Small delay to ensure previous question is fully processed
+            )
             
-            # Process bot answers for next question (with small delay)
+            # Process bot answers for next question (with additional delay)
             from tasks.bot_answers import process_bot_answers
             process_bot_answers.apply_async(
                 args=[game_id, round_id, next_question.id],
-                countdown=2  # Small delay to let question be sent first
+                countdown=4  # Delay to let question be sent first
             )
         else:
             # Last question in round - finish round
