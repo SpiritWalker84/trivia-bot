@@ -582,7 +582,7 @@ class GameNotifications:
             pause_text = (
                 f"⏸️ Пауза между раундами\n\n"
                 f"Следующий раунд ({next_round_number}/{self.config.ROUNDS_PER_GAME}) "
-                f"начнется через 1 минуту.\n"
+                f"начнется через 30 секунд.\n"
                 f"У вас есть время, чтобы посмотреть результаты."
             )
             
