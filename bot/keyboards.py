@@ -54,16 +54,6 @@ class QuestionAnswerKeyboard:
             round_question_id: Round question ID
             options: Dict mapping option letters to text
         """
-        # Log what options are being sent to user
-        from utils.logging import get_logger
-        import sys
-        logger = get_logger(__name__)
-        logger.info(f"[KEYBOARD] Creating keyboard for round_question_id={round_question_id}")
-        logger.info(f"[KEYBOARD] Options: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}")
-        # Also print to stderr to ensure it's visible
-        print(f"[KEYBOARD] Creating keyboard for round_question_id={round_question_id}", file=sys.stderr)
-        print(f"[KEYBOARD] Options: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}", file=sys.stderr)
-        
         keyboard = []
         for option in ['A', 'B', 'C', 'D']:
             if option in options:

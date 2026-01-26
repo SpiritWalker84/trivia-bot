@@ -65,15 +65,12 @@ class GameNotifications:
             
             # Explicitly access shuffled_options to ensure it's loaded from DB
             shuffled_opts = round_question.shuffled_options
-            print(f"[SEND_QUESTION] round_question.id={round_question.id}, question.id={question.id}, shuffled_options={shuffled_opts}, correct_option_shuffled={round_question.correct_option_shuffled}, has_shuffled={bool(shuffled_opts)}")
-            logger.info(f"[SEND_QUESTION] round_question.id={round_question.id}, question.id={question.id}, shuffled_options={shuffled_opts}, correct_option_shuffled={round_question.correct_option_shuffled}, has_shuffled={bool(shuffled_opts)}")
             
             if has_shuffled:
                 # Use shuffled options
                 shuffled_mapping = round_question.shuffled_options
                 # shuffled_mapping maps new_position -> original_position
                 # So we need to get the original option text for each new position
-                logger.info(f"Building SHUFFLED options with mapping: {shuffled_mapping} for question {question.id}, round_question {round_question.id}")
                 for new_pos in ['A', 'B', 'C', 'D']:
                     if new_pos in shuffled_mapping:
                         original_pos = shuffled_mapping[new_pos]
@@ -85,10 +82,8 @@ class GameNotifications:
                             options[new_pos] = question.option_c
                         elif original_pos == 'D' and question.option_d:
                             options[new_pos] = question.option_d
-                logger.info(f"Built SHUFFLED options dict: A={options.get('A', 'N/A')[:30]}, B={options.get('B', 'N/A')[:30]}, C={options.get('C', 'N/A')[:30]}, D={options.get('D', 'N/A')[:30]} for round_question {round_question.id}")
             else:
                 # Fallback to original options if no shuffling (backward compatibility)
-                logger.info(f"Building ORIGINAL options (no shuffling) for question {question.id}, round_question {round_question.id}")
                 if question.option_a:
                     options['A'] = question.option_a
                 if question.option_b:
@@ -137,23 +132,11 @@ class GameNotifications:
                     logger.warning(f"Failed to remove keyboard for user {user_id}: {e}")
             
             # Send question message
-            import sys
-            logger.info(f"[SEND_QUESTION] Sending question to user {user_id}, round_question_id={round_question.id}")
-            logger.info(f"[SEND_QUESTION] Final options being sent: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}")
-            logger.info(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}")
-            # Also print to stderr to ensure it's visible
-            print(f"[SEND_QUESTION] Sending question to user {user_id}, round_question_id={round_question.id}", file=sys.stderr)
-            print(f"[SEND_QUESTION] Final options: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}", file=sys.stderr)
-            print(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}", file=sys.stderr)
-            
             message = await self.bot.send_message(
                 chat_id=user_id,
                 text=question_text,
                 reply_markup=keyboard
             )
-            
-            logger.info(f"[SEND_QUESTION] Question sent successfully, message_id={message.message_id}")
-            print(f"[SEND_QUESTION] Question sent successfully, message_id={message.message_id}", file=sys.stderr)
             
             # Update displayed_at
             with db_session() as session:
@@ -298,8 +281,6 @@ class GameNotifications:
         Returns:
             Dict mapping user_id to success status
         """
-        logger.info(f"[SEND_TO_ALL] Starting send_question_to_all_players: game_id={game_id}, round_id={round_id}, round_question_id={round_question_id}")
-        
         with db_session() as session:
             game = session.query(Game).filter(Game.id == game_id).first()
             if not game:
@@ -315,24 +296,11 @@ class GameNotifications:
             if not round_question:
                 return {}
             
-            # Explicitly access shuffled_options to ensure it's loaded from DB
-            shuffled_opts = round_question.shuffled_options
-            correct_shuffled = round_question.correct_option_shuffled
-            logger.info(f"[SEND_TO_ALL] round_question.id={round_question.id}, shuffled_options={shuffled_opts}, correct_option_shuffled={correct_shuffled}")
-            
             question = session.query(Question).filter(
                 Question.id == round_question.question_id
             ).first()
             if not question:
                 return {}
-            
-            # IMPORTANT: Access all fields we need while still in session context
-            # Store values in local variables to avoid detached instance issues
-            round_question_id_local = round_question.id
-            round_number_local = round_obj.round_number
-            question_number_local = round_question.question_number
-            shuffled_options_local = shuffled_opts
-            correct_option_shuffled_local = correct_shuffled
             
             # Get theme name
             theme_name = None
@@ -364,20 +332,12 @@ class GameNotifications:
                 if not user or not user.telegram_id:
                     continue
                 
-                # Create a fresh round_question object with all needed data
-                # to avoid detached instance issues
-                from database.models import RoundQuestion as RQ
-                # Re-query round_question to ensure it's fresh and attached
-                fresh_rq = session.query(RQ).filter(RQ.id == round_question_id_local).first()
-                if not fresh_rq:
-                    continue
-                
                 success = await self.send_question_to_player(
                     user.telegram_id,
-                    fresh_rq,
+                    round_question,
                     question,
-                    round_number_local,
-                    question_number_local,
+                    round_obj.round_number,
+                    round_question.question_number,
                     theme_name
                 )
                 results[user.telegram_id] = success
