@@ -406,17 +406,23 @@ class GameNotifications:
                 if i > 0:  # Don't delay first player
                     await asyncio.sleep(0.3)
                 
-                success = await self.send_question_to_player(
-                    user.telegram_id,
-                    round_question,
-                    question,
-                    round_obj.round_number,
-                    round_question.question_number,
-                    theme_name,
-                    round_id=round_id,  # Pass explicit round_id to ensure correct round
-                    game_id=game_id     # Pass explicit game_id to ensure correct game
-                )
-                results[user.telegram_id] = success
+                try:
+                    success = await self.send_question_to_player(
+                        user.telegram_id,
+                        round_question,
+                        question,
+                        round_obj.round_number,
+                        round_question.question_number,
+                        theme_name,
+                        round_id=round_id,  # Pass explicit round_id to ensure correct round
+                        game_id=game_id     # Pass explicit game_id to ensure correct game
+                    )
+                    results[user.telegram_id] = success
+                except Exception as e:
+                    # If sending fails (e.g., Flood control), log but continue
+                    # displayed_at won't be set, so send_next_question will wait
+                    logger.error(f"Failed to send question to user {user.telegram_id}: {e}", exc_info=True)
+                    results[user.telegram_id] = False
             
             # Send to spectators (without answer buttons)
             for game_player in spectators:

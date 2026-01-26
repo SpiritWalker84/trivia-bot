@@ -239,6 +239,16 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
                 logger.error(f"Current question {current_question_number} not found in round {round_id}")
                 return
             
+            # CRITICAL: Check if current question was actually sent (displayed_at is set)
+            # If not, don't schedule next question - wait for current one to be sent
+            session.refresh(current_question)
+            if not current_question.displayed_at:
+                logger.warning(
+                    f"Current question {current_question_number} was not sent yet (displayed_at is None). "
+                    f"This might be due to Flood control. Skipping next question scheduling until current is sent."
+                )
+                return
+            
             # Calculate next question number
             next_question_number = current_question_number + 1
             
