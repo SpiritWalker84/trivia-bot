@@ -437,6 +437,10 @@ async def handle_training_difficulty(update: Update, context, data: str) -> None
                 total_rounds=10
             )
             
+            # Set bot difficulty for the game (use selected difficulty, not bot's stored difficulty)
+            game.bot_difficulty = difficulty
+            logger.info(f"Training game {game.id}: set bot_difficulty to '{difficulty}'")
+            
             # Add user
             game_player = GamePlayer(
                 game_id=game.id,
@@ -447,6 +451,7 @@ async def handle_training_difficulty(update: Update, context, data: str) -> None
             session.add(game_player)
             
             # Add bots (9 bots needed for 10 total players)
+            # Use game's bot_difficulty, not bot's stored difficulty
             bots_needed = 9
             bots = UserQueries.get_bots(session, limit=bots_needed)
             
@@ -457,14 +462,17 @@ async def handle_training_difficulty(update: Update, context, data: str) -> None
                 )
             
             for i, bot in enumerate(bots, 2):
+                # Use game's bot_difficulty, not bot's stored difficulty
+                # This ensures all bots in the game have the same difficulty level
                 bot_player = GamePlayer(
                     game_id=game.id,
                     user_id=bot.id,
                     is_bot=True,
-                    bot_difficulty=bot.bot_difficulty,
+                    bot_difficulty=difficulty,  # Use selected difficulty, not bot.bot_difficulty
                     join_order=i
                 )
                 session.add(bot_player)
+                logger.debug(f"Training game {game.id}: added bot {bot.id} with difficulty '{difficulty}' as player {i}")
             
             session.commit()
             
