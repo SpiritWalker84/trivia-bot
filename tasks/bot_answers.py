@@ -172,6 +172,7 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         current_question_number: Current question number
     """
     from database.models import RoundQuestion, Round, Game
+    from sqlalchemy import func
     
     with db_session() as session:
         # Verify game and round are still active
@@ -194,6 +195,29 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         if not current_question:
             logger.error(f"Current question {current_question_number} not found in round {round_id}")
             return
+        
+        # Find the last question that was actually displayed (to prevent skipping)
+        last_displayed_question = session.query(RoundQuestion).filter(
+            RoundQuestion.round_id == round_id,
+            RoundQuestion.displayed_at.isnot(None)
+        ).order_by(RoundQuestion.question_number.desc()).first()
+        
+        if last_displayed_question:
+            last_displayed_number = last_displayed_question.question_number
+            # If we're trying to send a question that's not the immediate next one, skip
+            if current_question_number < last_displayed_number:
+                logger.warning(
+                    f"Attempting to send question {current_question_number + 1}, "
+                    f"but last displayed was {last_displayed_number}. Skipping to prevent duplicate."
+                )
+                return
+            # If we're trying to send a question that's already been displayed, skip
+            if current_question_number + 1 <= last_displayed_number:
+                logger.warning(
+                    f"Question {current_question_number + 1} was already displayed "
+                    f"(last displayed: {last_displayed_number}). Skipping."
+                )
+                return
         
         # Check if next question was already sent (protection against duplicate calls)
         next_question_number = current_question_number + 1
