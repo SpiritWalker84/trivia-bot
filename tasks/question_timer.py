@@ -189,7 +189,8 @@ def update_question_timer(
         # Don't return - continue scheduling next update
     
     # Schedule next update if time remaining
-    if remaining > 1:
+    interval = max(1, int(config.config.TIMER_UPDATE_INTERVAL_SEC))
+    if remaining > interval:
         # Check if question is still active before scheduling next update
         with db_session() as session:
             # Check if user answered
@@ -215,10 +216,11 @@ def update_question_timer(
                     logger.debug(f"Next question already displayed (question_number={next_question.question_number}), stopping timer for round_question_id={round_question_id}")
                     return
         
-        # Schedule next update
+        # Schedule next update with a larger interval to reduce Telegram load
+        next_remaining = max(remaining - interval, 0)
         update_question_timer.apply_async(
-            args=[game_id, round_id, round_question_id, user_id, message_id, remaining - 1, time_limit],
-            countdown=1
+            args=[game_id, round_id, round_question_id, user_id, message_id, next_remaining, time_limit],
+            countdown=interval
         )
     else:
         # Time expired, stop timer

@@ -51,6 +51,7 @@ class Config:
     QUESTION_TIME_LIMIT: int = int(os.getenv("QUESTION_TIME_LIMIT", "10"))  # seconds
     TIE_BREAK_TIME_LIMIT: int = int(os.getenv("TIE_BREAK_TIME_LIMIT", "20"))  # seconds
     PAUSE_BETWEEN_ROUNDS_SEC: int = int(os.getenv("PAUSE_BETWEEN_ROUNDS_SEC", "60"))  # seconds
+    TIMER_UPDATE_INTERVAL_SEC: int = int(os.getenv("TIMER_UPDATE_INTERVAL_SEC", "2"))  # seconds
     
     # Game Settings
     ROUNDS_PER_GAME: int = int(os.getenv("ROUNDS_PER_GAME", "9"))

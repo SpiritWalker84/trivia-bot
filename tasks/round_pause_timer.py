@@ -171,10 +171,12 @@ def update_round_pause_timer(
             logger.debug(f"Round {next_round} already exists and is in_progress, stopping pause timer")
             return
     
-    if remaining > 1:
+    interval = max(1, int(config.config.TIMER_UPDATE_INTERVAL_SEC))
+    if remaining > interval:
+        next_remaining = max(remaining - interval, 0)
         update_round_pause_timer.apply_async(
-            args=[game_id, next_round, user_id, message_id, remaining - 1, time_limit],
-            countdown=1
+            args=[game_id, next_round, user_id, message_id, next_remaining, time_limit],
+            countdown=interval
         )
     else:
         logger.debug(f"Pause timer finished for game {game_id}, next round {next_round}")
