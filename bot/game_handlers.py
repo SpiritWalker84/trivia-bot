@@ -154,21 +154,8 @@ async def handle_answer(
                 correct_option_display = correct_option if round_question.correct_option_shuffled else question.correct_option
                 feedback_text = f"❌ Неправильно. Правильный ответ: {correct_option_display} (вы ответили за {time_str} сек)"
             
-            # Add leaderboard only if not first question (to avoid clutter)
-            # Show leaderboard starting from question 2
-            if round_question.question_number > 1:
-                from bot.round_leaderboard import get_round_leaderboard
-                
-                # Get leaderboard
-                leaderboard_text, player_position = get_round_leaderboard(
-                    game.id,
-                    round_obj.id,
-                    db_user.id
-                )
-                
-                # Add leaderboard if available
-                if leaderboard_text:
-                    feedback_text += f"\n\n{leaderboard_text}"
+            # Don't show leaderboard after answer - it's already shown in the question itself
+            # This prevents duplicate leaderboard display
             
             await query.message.reply_text(feedback_text, parse_mode="Markdown")
             

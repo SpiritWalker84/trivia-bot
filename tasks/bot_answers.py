@@ -181,10 +181,9 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         ).first()
         
         if next_question:
-            # Send next question with a fixed delay based on QUESTION_TIME_LIMIT
-            # This ensures consistent timing regardless of when collect_answers was called
-            # Use QUESTION_TIME_LIMIT + 3 seconds to ensure all processing is complete
-            delay = config.config.QUESTION_TIME_LIMIT + 3
+            # Send next question with a short delay (1-2 seconds)
+            # This ensures all processing is complete but keeps the game pace fast
+            delay = 2  # 2 seconds delay between questions
             logger.info(f"Scheduling next question {next_question_number} with {delay}s delay after question {current_question_number}")
             send_question_to_players.apply_async(
                 args=[game_id, round_id, next_question.id],
