@@ -96,10 +96,15 @@ async def handle_answer(
         # Check if answer is correct (use shuffled correct option if available)
         if round_question.correct_option_shuffled:
             correct_option = round_question.correct_option_shuffled
+            logger.debug(f"Using shuffled correct option: {correct_option} (original was {question.correct_option})")
         else:
             # Fallback to original correct option (backward compatibility)
             correct_option = question.correct_option
+            logger.debug(f"Using original correct option: {correct_option}")
+        
+        logger.debug(f"Answer check: selected={selected_option.upper()}, correct={correct_option.upper()}")
         is_correct = (selected_option.upper() == correct_option.upper())
+        logger.info(f"Answer is {'CORRECT' if is_correct else 'INCORRECT'}: user selected {selected_option}, correct was {correct_option}")
         
         # Get game and game_player
         game = session.query(Game).filter(Game.id == round_obj.game_id).first()

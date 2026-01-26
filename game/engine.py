@@ -68,6 +68,9 @@ class GameEngine:
                                This means: new position A shows original option C
             - correct_option_shuffled: The correct option letter after shuffling
         """
+        from utils.logging import get_logger
+        logger = get_logger(__name__)
+        
         # Collect available options with their original positions
         original_options = []
         available_letters = []
@@ -85,9 +88,15 @@ class GameEngine:
             original_options.append(('D', question.option_d))
             available_letters.append('D')
         
+        # Store original correct option
+        correct_original = question.correct_option.upper()
+        logger.debug(f"Shuffling question {question.id}: original correct={correct_original}, available={available_letters}")
+        
         # Shuffle the list of options
         shuffled_options = original_options.copy()
         random.shuffle(shuffled_options)
+        
+        logger.debug(f"After shuffle: {[(l, t[:20]) for l, t in shuffled_options]}")
         
         # Create mapping: new_position -> original_position
         # This tells us which original option text to show at each new position
@@ -96,13 +105,16 @@ class GameEngine:
             new_letter = available_letters[i]
             shuffled_mapping[new_letter] = original_letter
         
+        logger.debug(f"Shuffled mapping: {shuffled_mapping}")
+        
         # Find where the correct option ended up
-        correct_original = question.correct_option.upper()
         # Find which new position contains the correct original option
         correct_option_shuffled = next(
             (new_letter for new_letter, orig_letter in shuffled_mapping.items() if orig_letter == correct_original),
             correct_original
         )
+        
+        logger.debug(f"Correct option after shuffle: {correct_option_shuffled} (was {correct_original})")
         
         return shuffled_mapping, correct_option_shuffled
     
