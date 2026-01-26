@@ -55,17 +55,67 @@ def cleanup_all_games():
         session.commit()
         logger.info(f"Updated {len(active_games)} games to cancelled status")
     
-    # Cancel all Celery tasks and clear Redis queues
+    # Clear Redis directly FIRST (this works even if Celery is not running)
+    logger.info("Clearing Redis queues directly...")
+    try:
+        import redis
+        from urllib.parse import urlparse
+        
+        broker_url = config.config.CELERY_BROKER_URL
+        logger.info(f"Connecting to Redis: {broker_url}")
+        
+        # Connect to Redis
+        redis_client = redis.from_url(broker_url, decode_responses=False)
+        
+        # Get all keys related to Celery
+        celery_keys = redis_client.keys('celery*')
+        if celery_keys:
+            logger.info(f"Found {len(celery_keys)} Celery-related keys in Redis")
+            # Delete all Celery keys
+            deleted = 0
+            for key in celery_keys:
+                redis_client.delete(key)
+                deleted += 1
+            logger.info(f"✅ Deleted {deleted} Celery keys from Redis")
+        else:
+            logger.info("No Celery keys found in Redis")
+        
+        # Also clear specific queue names that Celery uses
+        queue_names = ['celery', 'default']
+        for queue_name in queue_names:
+            try:
+                queue_key = queue_name
+                queue_length = redis_client.llen(queue_key)
+                if queue_length > 0:
+                    redis_client.delete(queue_key)
+                    logger.info(f"✅ Cleared queue '{queue_name}' ({queue_length} tasks)")
+            except Exception as e:
+                logger.debug(f"Could not check/clear queue '{queue_name}': {e}")
+        
+        # Also try to clear all keys matching common Celery patterns
+        patterns = ['celery-task-meta-*', '_kombu.binding.*']
+        for pattern in patterns:
+            try:
+                keys = redis_client.keys(pattern)
+                if keys:
+                    deleted = redis_client.delete(*keys)
+                    logger.info(f"✅ Deleted {deleted} keys matching pattern '{pattern}'")
+            except Exception as e:
+                logger.debug(f"Could not clear pattern '{pattern}': {e}")
+                
+    except ImportError:
+        logger.warning("Redis library not installed. Install with: pip install redis")
+    except Exception as e:
+        logger.warning(f"Could not clear Redis directly: {e}")
+        logger.info("This is normal if Redis is not accessible or Celery uses a different broker")
+    
+    # Cancel all Celery tasks (this requires Celery to be running)
     try:
         from tasks.celery_app import celery_app
         
-        # First, try to purge all Celery queues in Redis
-        logger.info("Purging Celery queues in Redis...")
+        # Try to purge all Celery queues via Celery API
+        logger.info("Purging Celery queues via Celery API...")
         try:
-            # Get all queue names from Celery config
-            broker_url = config.config.CELERY_BROKER_URL
-            logger.info(f"Broker URL: {broker_url}")
-            
             # Purge all queues
             purged = celery_app.control.purge()
             if purged:
@@ -74,10 +124,10 @@ def cleanup_all_games():
                     if count > 0:
                         logger.info(f"  Worker {worker}: purged {count} tasks")
             else:
-                logger.info("No tasks found in Celery queues to purge")
+                logger.info("No tasks found in Celery queues to purge (via Celery API)")
         except Exception as e:
-            logger.warning(f"Failed to purge Celery queues: {e}")
-            logger.info("This is normal if Celery is not running or Redis is not accessible")
+            logger.warning(f"Failed to purge Celery queues via API: {e}")
+            logger.info("This is normal if Celery is not running")
         
         # Get active tasks
         inspect = celery_app.control.inspect()
