@@ -92,7 +92,11 @@ def process_game_vote(self: Task, game_id: int) -> None:
         n_bots_needed = max(0, n_total - n_live)
         
         if n_bots_needed > 0:
-            # Get bots
+            # Get bot difficulty from game settings, or use default 'amateur' for quick games
+            bot_difficulty = game.bot_difficulty or 'amateur'  # Default to amateur for quick games
+            logger.info(f"Quick game {game.id}: using bot_difficulty '{bot_difficulty}'")
+            
+            # Get bots (we'll override their difficulty in GamePlayer)
             bots = UserQueries.get_bots(session, limit=n_bots_needed)
             
             # Add bots to game
@@ -102,14 +106,17 @@ def process_game_vote(self: Task, game_id: int) -> None:
             )
             
             for i, bot in enumerate(bots, 1):
+                # Use game's bot_difficulty, not bot's stored difficulty
+                # This ensures all bots in the game have the same difficulty level
                 game_player = GamePlayer(
                     game_id=game.id,
                     user_id=bot.id,
                     is_bot=True,
-                    bot_difficulty=bot.bot_difficulty,
+                    bot_difficulty=bot_difficulty,  # Use game's difficulty setting
                     join_order=current_max_order + i
                 )
                 session.add(game_player)
+                logger.debug(f"Quick game {game.id}: added bot {bot.id} with difficulty '{bot_difficulty}'")
         
         # Update game status
         game.status = 'in_progress'
