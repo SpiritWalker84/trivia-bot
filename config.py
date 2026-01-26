@@ -50,6 +50,7 @@ class Config:
     VOTE_DURATION: int = int(os.getenv("VOTE_DURATION", "45"))  # seconds
     QUESTION_TIME_LIMIT: int = int(os.getenv("QUESTION_TIME_LIMIT", "10"))  # seconds
     TIE_BREAK_TIME_LIMIT: int = int(os.getenv("TIE_BREAK_TIME_LIMIT", "20"))  # seconds
+    PAUSE_BETWEEN_ROUNDS_SEC: int = int(os.getenv("PAUSE_BETWEEN_ROUNDS_SEC", "60"))  # seconds
     
     # Game Settings
     ROUNDS_PER_GAME: int = int(os.getenv("ROUNDS_PER_GAME", "9"))

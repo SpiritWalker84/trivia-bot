@@ -155,10 +155,10 @@ def finish_round_task(game_id: int, round_number: int) -> None:
             except Exception as e:
                 logger.error(f"Failed to send pause notification: {e}", exc_info=True)
             
-            # Schedule next round after 60 seconds
+            # Schedule next round after pause duration
             start_next_round_task.apply_async(
                 args=[game_id, next_round],
-                countdown=60  # 60 second pause to let players review results
+                countdown=config.config.PAUSE_BETWEEN_ROUNDS_SEC  # Use config value to match timer
             )
         else:
             # Last round finished

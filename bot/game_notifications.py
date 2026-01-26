@@ -626,7 +626,7 @@ class GameNotifications:
                 if gp.is_eliminated and gp.is_spectator is True and not gp.left_game
             ]
             
-            time_limit = 60  # 60 seconds pause
+            time_limit = self.config.PAUSE_BETWEEN_ROUNDS_SEC  # Use config value
             
             # Send to all alive players with timer
             for game_player in alive_players:
