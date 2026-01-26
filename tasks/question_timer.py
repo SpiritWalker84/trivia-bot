@@ -113,17 +113,36 @@ def update_question_timer(
         
         question_text += f"\n⏱️ {remaining} сек [{progress_bar}]"
         
-        # Rebuild keyboard to keep buttons
+        # Rebuild keyboard to keep buttons (use shuffled options if available)
         from bot.keyboards import QuestionAnswerKeyboard
         options = {}
-        if question.option_a:
-            options['A'] = question.option_a
-        if question.option_b:
-            options['B'] = question.option_b
-        if question.option_c:
-            options['C'] = question.option_c
-        if question.option_d:
-            options['D'] = question.option_d
+        
+        # Use shuffled options if available, otherwise use original
+        if rq.shuffled_options:
+            shuffled_mapping = rq.shuffled_options
+            logger.debug(f"[TIMER] Using shuffled options for round_question_id={round_question_id}: {shuffled_mapping}")
+            for new_pos in ['A', 'B', 'C', 'D']:
+                if new_pos in shuffled_mapping:
+                    original_pos = shuffled_mapping[new_pos]
+                    if original_pos == 'A' and question.option_a:
+                        options[new_pos] = question.option_a
+                    elif original_pos == 'B' and question.option_b:
+                        options[new_pos] = question.option_b
+                    elif original_pos == 'C' and question.option_c:
+                        options[new_pos] = question.option_c
+                    elif original_pos == 'D' and question.option_d:
+                        options[new_pos] = question.option_d
+        else:
+            # Fallback to original options if no shuffling
+            logger.debug(f"[TIMER] Using original options for round_question_id={round_question_id} (no shuffling)")
+            if question.option_a:
+                options['A'] = question.option_a
+            if question.option_b:
+                options['B'] = question.option_b
+            if question.option_c:
+                options['C'] = question.option_c
+            if question.option_d:
+                options['D'] = question.option_d
         
         keyboard = QuestionAnswerKeyboard.get_keyboard(round_question_id, options)
     
