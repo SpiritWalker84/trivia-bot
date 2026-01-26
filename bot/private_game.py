@@ -550,16 +550,18 @@ async def handle_private_game_start(update: Update, context, game_id: int) -> No
             
             added_bots_count = 0
             for i, bot in enumerate(bots[:bots_needed], players_count + 1):
+                # Use game's bot_difficulty, not bot's stored difficulty
+                # This ensures all bots in the game have the same difficulty level
                 bot_player = GamePlayer(
                     game_id=game_id,
                     user_id=bot.id,
                     is_bot=True,
-                    bot_difficulty=bot.bot_difficulty,
+                    bot_difficulty=bot_difficulty,  # Use game's difficulty setting
                     join_order=i
                 )
                 session.add(bot_player)
                 added_bots_count += 1
-                logger.info(f"Private game {game_id}: added bot {bot.id} (difficulty: {bot.bot_difficulty}) as player {i}")
+                logger.info(f"Private game {game_id}: added bot {bot.id} with game difficulty '{bot_difficulty}' as player {i}")
             
             logger.info(f"Private game {game_id}: added {added_bots_count} bots, total players now: {players_count + added_bots_count}")
         else:
