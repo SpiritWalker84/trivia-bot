@@ -181,12 +181,49 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         ).first()
         
         if next_question:
-            # Send next question with a small delay to ensure previous question processing is complete
-            # This prevents questions from being sent too quickly
-            send_question_to_players.apply_async(
-                args=[game_id, round_id, next_question.id],
-                countdown=2  # Small delay to ensure previous question is fully processed
-            )
+            # Check if previous question is actually finished
+            # Get current question to verify it's been processed
+            current_question = session.query(RoundQuestion).filter(
+                RoundQuestion.round_id == round_id,
+                RoundQuestion.question_number == current_question_number
+            ).first()
+            
+            if current_question:
+                # Verify that enough time has passed since question was displayed
+                from datetime import datetime, timedelta
+                import pytz
+                if current_question.displayed_at:
+                    time_since_display = (datetime.now(pytz.UTC) - current_question.displayed_at).total_seconds()
+                    min_time = config.config.QUESTION_TIME_LIMIT + 2  # At least time limit + 2 seconds
+                    if time_since_display < min_time:
+                        # Not enough time has passed, schedule with remaining delay
+                        remaining_delay = max(1, int(min_time - time_since_display))
+                        logger.info(f"Question {current_question_number} displayed {time_since_display:.1f}s ago, scheduling next question with {remaining_delay}s delay")
+                        send_question_to_players.apply_async(
+                            args=[game_id, round_id, next_question.id],
+                            countdown=remaining_delay
+                        )
+                    else:
+                        # Enough time has passed, send immediately with small delay
+                        logger.info(f"Question {current_question_number} displayed {time_since_display:.1f}s ago, sending next question")
+                        send_question_to_players.apply_async(
+                            args=[game_id, round_id, next_question.id],
+                            countdown=2  # Small delay to ensure previous question is fully processed
+                        )
+                else:
+                    # No displayed_at, use default delay
+                    logger.warning(f"Question {current_question_number} has no displayed_at, using default delay")
+                    send_question_to_players.apply_async(
+                        args=[game_id, round_id, next_question.id],
+                        countdown=config.config.QUESTION_TIME_LIMIT + 2
+                    )
+            else:
+                # Current question not found, use default delay
+                logger.warning(f"Question {current_question_number} not found, using default delay")
+                send_question_to_players.apply_async(
+                    args=[game_id, round_id, next_question.id],
+                    countdown=config.config.QUESTION_TIME_LIMIT + 2
+                )
             
             # Process bot answers for next question (with additional delay)
             from tasks.bot_answers import process_bot_answers

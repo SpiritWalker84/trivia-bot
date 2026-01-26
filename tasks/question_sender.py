@@ -157,7 +157,9 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
         session.commit()
         
         # Send next question or finish round
+        # Add a small delay to ensure all answers are processed and committed
         from tasks.bot_answers import send_next_question
-        send_next_question.delay(
-            game_id, round_id, round_question.question_number
+        send_next_question.apply_async(
+            args=[game_id, round_id, round_question.question_number],
+            countdown=1  # Small delay to ensure database commit is complete
         )
