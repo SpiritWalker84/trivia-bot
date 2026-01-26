@@ -136,11 +136,17 @@ class GameNotifications:
                     logger.warning(f"Failed to remove keyboard for user {user_id}: {e}")
             
             # Send question message
+            logger.info(f"[SEND_QUESTION] Sending question to user {user_id}, round_question_id={round_question.id}")
+            logger.info(f"[SEND_QUESTION] Final options being sent: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}")
+            logger.info(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}")
+            
             message = await self.bot.send_message(
                 chat_id=user_id,
                 text=question_text,
                 reply_markup=keyboard
             )
+            
+            logger.info(f"[SEND_QUESTION] Question sent successfully, message_id={message.message_id}")
             
             # Update displayed_at
             with db_session() as session:
