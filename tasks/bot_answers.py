@@ -78,6 +78,9 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
             # Create bot AI
             bot_ai = BotAI(difficulty)
             
+            # Log bot difficulty for debugging
+            logger.info(f"Bot {game_player.user_id} (player {game_player.id}) using difficulty: {difficulty_str} (accuracy: {bot_ai.accuracy:.1%})")
+            
             # Get available options (after shuffling)
             options = []
             if round_question.shuffled_options:

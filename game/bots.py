@@ -33,6 +33,11 @@ class BotAI:
         else:  # EXPERT
             return self.config.BOT_EXPERT_ACCURACY
     
+    @property
+    def accuracy(self) -> float:
+        """Get current accuracy value (for external access)."""
+        return self._accuracy
+    
     def generate_answer(
         self,
         question_id: int,
