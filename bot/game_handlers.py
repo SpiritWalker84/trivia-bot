@@ -146,15 +146,6 @@ async def handle_answer(
         # Format time: show seconds with 1 decimal place
         time_str = f"{float(answer_time_decimal):.1f}"
         try:
-            from bot.round_leaderboard import get_round_leaderboard
-            
-            # Get leaderboard
-            leaderboard_text, player_position = get_round_leaderboard(
-                game.id,
-                round_obj.id,
-                db_user.id
-            )
-            
             # Build feedback message
             if is_correct:
                 feedback_text = f"✅ Правильно! (вы ответили за {time_str} сек)"
@@ -163,9 +154,21 @@ async def handle_answer(
                 correct_option_display = correct_option if round_question.correct_option_shuffled else question.correct_option
                 feedback_text = f"❌ Неправильно. Правильный ответ: {correct_option_display} (вы ответили за {time_str} сек)"
             
-            # Add leaderboard if available
-            if leaderboard_text:
-                feedback_text += f"\n\n{leaderboard_text}"
+            # Add leaderboard only if not first question (to avoid clutter)
+            # Show leaderboard starting from question 2
+            if round_question.question_number > 1:
+                from bot.round_leaderboard import get_round_leaderboard
+                
+                # Get leaderboard
+                leaderboard_text, player_position = get_round_leaderboard(
+                    game.id,
+                    round_obj.id,
+                    db_user.id
+                )
+                
+                # Add leaderboard if available
+                if leaderboard_text:
+                    feedback_text += f"\n\n{leaderboard_text}"
             
             await query.message.reply_text(feedback_text, parse_mode="Markdown")
             
