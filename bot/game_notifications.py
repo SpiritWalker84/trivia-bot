@@ -17,6 +17,79 @@ import config
 logger = get_logger(__name__)
 
 
+def get_round_leaderboard_text(game_id: int, round_id: int, current_user_id: int = None) -> str:
+    """
+    Get current round leaderboard text showing player positions.
+    
+    Args:
+        game_id: Game ID
+        round_id: Round ID
+        current_user_id: Optional current user ID to highlight in leaderboard
+        
+    Returns:
+        Formatted leaderboard text
+    """
+    from database.models import GamePlayer, Answer, User
+    
+    if not game_id or not round_id:
+        return ""
+    
+    with db_session() as session:
+        # Get all alive players
+        players = session.query(GamePlayer).filter(
+            GamePlayer.game_id == game_id,
+            GamePlayer.is_eliminated == False
+        ).all()
+        
+        if not players:
+            return ""
+        
+        # Get current round answers for each player
+        player_scores = []
+        for player in players:
+            # Count correct answers in current round
+            correct_count = session.query(Answer).filter(
+                Answer.round_id == round_id,
+                Answer.user_id == player.user_id,
+                Answer.is_correct == True
+            ).count()
+            
+            # Get user name
+            user = session.query(User).filter(User.id == player.user_id).first()
+            if user:
+                player_name = user.full_name or user.username or f"User {user.id}"
+                player_scores.append({
+                    'user_id': player.user_id,
+                    'name': player_name,
+                    'score': correct_count,
+                    'is_bot': player.is_bot
+                })
+        
+        # Sort by score (descending), then by name (ascending) for tie-breaking
+        player_scores.sort(key=lambda x: (-x['score'], x['name'].lower()))
+        
+        # Build leaderboard text
+        leaderboard_lines = ["📊 Текущие результаты раунда:\n"]
+        for i, player in enumerate(player_scores, 1):
+            medal = ""
+            if i == 1:
+                medal = "🥇"
+            elif i == 2:
+                medal = "🥈"
+            elif i == 3:
+                medal = "🥉"
+            
+            # Highlight current user
+            marker = "👤 " if player['user_id'] == current_user_id else ""
+            bot_marker = "🤖 " if player['is_bot'] else ""
+            
+            leaderboard_lines.append(
+                f"{medal} {i}. {marker}{bot_marker}{player['name']}: {player['score']} ✓"
+            )
+        
+        return "\n".join(leaderboard_lines)
+
+
 class GameNotifications:
     """Handles sending game notifications to players."""
     
@@ -51,6 +124,17 @@ class GameNotifications:
         """
         logger.info(f"[SEND_QUESTION_START] user_id={user_id}, round_question_id={round_question.id}, question_id={question.id}")
         try:
+            # Get current user ID and game/round info for leaderboard
+            with db_session() as session:
+                from database.models import User, Round
+                db_user = session.query(User).filter(User.telegram_id == user_id).first()
+                current_user_id = db_user.id if db_user else None
+                
+                # Get round to get game_id
+                round_obj = session.query(Round).filter(Round.id == round_question.round_id).first()
+                game_id = round_obj.game_id if round_obj else None
+                round_id = round_question.round_id
+            
             # Build question text
             theme_text = f" | Тема: {theme_name}" if theme_name else ""
             question_text = (
@@ -58,6 +142,15 @@ class GameNotifications:
                 f"Вопрос {question_number}/{self.config.QUESTIONS_PER_ROUND}:\n\n"
                 f"❓ {question.question_text}\n\n"
             )
+            
+            # Add leaderboard
+            leaderboard_text = get_round_leaderboard_text(
+                game_id,
+                round_id,
+                current_user_id
+            )
+            if leaderboard_text:
+                question_text += f"\n{leaderboard_text}\n"
             
             # Build options using shuffled mapping if available
             options = {}
@@ -102,13 +195,6 @@ class GameNotifications:
             question_text += f"\n⏱️ {time_limit} сек [{progress_bar}]"
             
             # Create keyboard
-            print(f"[SEND_QUESTION] Creating keyboard with options: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}")
-            print(f"[SEND_QUESTION] Original options: A={question.option_a[:50] if question.option_a else 'N/A'}, B={question.option_b[:50] if question.option_b else 'N/A'}, C={question.option_c[:50] if question.option_c else 'N/A'}, D={question.option_d[:50] if question.option_d else 'N/A'}")
-            print(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}")
-            logger.info(f"[SEND_QUESTION] Creating keyboard with options: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}")
-            logger.info(f"[SEND_QUESTION] Original options: A={question.option_a[:50] if question.option_a else 'N/A'}, B={question.option_b[:50] if question.option_b else 'N/A'}, C={question.option_c[:50] if question.option_c else 'N/A'}, D={question.option_d[:50] if question.option_d else 'N/A'}")
-            logger.info(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}")
-            
             keyboard = QuestionAnswerKeyboard.get_keyboard(
                 round_question.id,
                 options
