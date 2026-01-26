@@ -62,12 +62,14 @@ class GameNotifications:
             options = {}
             has_shuffled = bool(round_question.shuffled_options)
             
+            logger.info(f"send_question_to_player: round_question.id={round_question.id}, question.id={question.id}, shuffled_options={round_question.shuffled_options}, correct_option_shuffled={round_question.correct_option_shuffled}")
+            
             if has_shuffled:
                 # Use shuffled options
                 shuffled_mapping = round_question.shuffled_options
                 # shuffled_mapping maps new_position -> original_position
                 # So we need to get the original option text for each new position
-                logger.info(f"Building SHUFFLED options with mapping: {shuffled_mapping} for question {question.id}")
+                logger.info(f"Building SHUFFLED options with mapping: {shuffled_mapping} for question {question.id}, round_question {round_question.id}")
                 for new_pos in ['A', 'B', 'C', 'D']:
                     if new_pos in shuffled_mapping:
                         original_pos = shuffled_mapping[new_pos]
@@ -79,7 +81,7 @@ class GameNotifications:
                             options[new_pos] = question.option_c
                         elif original_pos == 'D' and question.option_d:
                             options[new_pos] = question.option_d
-                logger.info(f"Built SHUFFLED options: {list(options.keys())} for round_question {round_question.id}")
+                logger.info(f"Built SHUFFLED options dict: A={options.get('A', 'N/A')[:30]}, B={options.get('B', 'N/A')[:30]}, C={options.get('C', 'N/A')[:30]}, D={options.get('D', 'N/A')[:30]} for round_question {round_question.id}")
             else:
                 # Fallback to original options if no shuffling (backward compatibility)
                 logger.info(f"Building ORIGINAL options (no shuffling) for question {question.id}, round_question {round_question.id}")
@@ -91,6 +93,7 @@ class GameNotifications:
                     options['C'] = question.option_c
                 if question.option_d:
                     options['D'] = question.option_d
+                logger.info(f"Built ORIGINAL options dict: A={options.get('A', 'N/A')[:30]}, B={options.get('B', 'N/A')[:30]}, C={options.get('C', 'N/A')[:30]}, D={options.get('D', 'N/A')[:30]}")
             
             # Visual progress bar for timer
             time_limit = self.config.QUESTION_TIME_LIMIT
@@ -286,6 +289,10 @@ class GameNotifications:
             ).first()
             if not round_question:
                 return {}
+            
+            # Explicitly access shuffled_options to ensure it's loaded
+            shuffled_opts = round_question.shuffled_options
+            logger.info(f"send_question_to_all_players: round_question.id={round_question.id}, shuffled_options={shuffled_opts}, correct_option_shuffled={round_question.correct_option_shuffled}")
             
             question = session.query(Question).filter(
                 Question.id == round_question.question_id
