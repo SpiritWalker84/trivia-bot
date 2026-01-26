@@ -106,22 +106,25 @@ def update_question_timer(
         )
         
         # Add leaderboard if available (only if not first question)
-        if rq.question_number > 1:
+        if rq.question_number > 1 and round_obj:
             try:
                 from bot.round_leaderboard import get_round_leaderboard
                 from database.models import User
                 db_user = session.query(User).filter(User.telegram_id == user_id).first()
                 current_user_id = db_user.id if db_user else None
                 
+                # Verify we're using the correct round_id
+                logger.debug(f"Timer update: round_id={round_id}, round_obj.id={round_obj.id}, question_number={rq.question_number}")
+                
                 leaderboard_text, _ = get_round_leaderboard(
-                    round_obj.game_id if round_obj else None,
-                    round_id,
+                    round_obj.game_id,
+                    round_obj.id,  # Use round_obj.id to ensure we have the correct round
                     current_user_id
                 )
                 if leaderboard_text:
                     question_text += f"{leaderboard_text}\n\n"
             except Exception as e:
-                logger.warning(f"Failed to add leaderboard to timer update: {e}")
+                logger.warning(f"Failed to add leaderboard to timer update: {e}", exc_info=True)
                 # Continue without leaderboard
         
         # Visual progress bar

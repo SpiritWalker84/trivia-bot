@@ -51,22 +51,6 @@ class GameNotifications:
         """
         try:
             # Get current user ID and game/round info for leaderboard
-            with db_session() as session:
-                from database.models import User, Round
-                db_user = session.query(User).filter(User.telegram_id == user_id).first()
-                current_user_id = db_user.id if db_user else None
-                
-                # Get round to get game_id (re-query round_question to ensure it's attached)
-                rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question.id).first()
-                if not rq:
-                    logger.error(f"RoundQuestion {round_question.id} not found in session")
-                    return False
-                
-                round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
-                game_id = round_obj.game_id if round_obj else None
-                round_id = rq.round_id
-            
-            # Get current user ID for leaderboard
             current_user_id = None
             game_id = None
             round_id = None
@@ -76,12 +60,22 @@ class GameNotifications:
                     db_user = session.query(User).filter(User.telegram_id == user_id).first()
                     current_user_id = db_user.id if db_user else None
                     
-                    # Get round to get game_id
-                    round_obj = session.query(Round).filter(Round.id == round_question.round_id).first()
-                    game_id = round_obj.game_id if round_obj else None
-                    round_id = round_question.round_id
+                    # Re-query round_question to ensure it's attached to session and get fresh round_id
+                    rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question.id).first()
+                    if not rq:
+                        logger.error(f"RoundQuestion {round_question.id} not found in session")
+                        return False
+                    
+                    # Get round to get game_id - use rq.round_id to ensure we have the correct round
+                    round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
+                    if round_obj:
+                        game_id = round_obj.game_id
+                        round_id = rq.round_id
+                        logger.debug(f"Question {question_number} in round {round_number}: game_id={game_id}, round_id={round_id}")
+                    else:
+                        logger.warning(f"Round {rq.round_id} not found for round_question {round_question.id}")
             except Exception as e:
-                logger.warning(f"Failed to get user/round info for leaderboard: {e}")
+                logger.warning(f"Failed to get user/round info for leaderboard: {e}", exc_info=True)
             
             # Build question text
             theme_text = f" | Тема: {theme_name}" if theme_name else ""

@@ -24,6 +24,18 @@ def get_round_leaderboard(game_id: int, round_id: int, current_user_id: int = No
     """
     try:
         with db_session() as session:
+            # Verify round exists and is correct
+            from database.models import Round, Game
+            round_obj = session.query(Round).filter(Round.id == round_id).first()
+            if not round_obj:
+                logger.warning(f"Round {round_id} not found for leaderboard")
+                return "", None
+            
+            # Verify game matches
+            if round_obj.game_id != game_id:
+                logger.warning(f"Round {round_id} belongs to game {round_obj.game_id}, not {game_id}")
+                return "", None
+            
             # Get all alive players
             players = session.query(GamePlayer).filter(
                 GamePlayer.game_id == game_id,
@@ -36,12 +48,15 @@ def get_round_leaderboard(game_id: int, round_id: int, current_user_id: int = No
             # Get current round answers for each player
             player_scores = []
             for player in players:
-                # Count correct answers in current round
+                # Count correct answers in current round ONLY
+                # Important: filter by round_id to ensure we only count answers from this specific round
                 correct_count = session.query(Answer).filter(
                     Answer.round_id == round_id,
                     Answer.user_id == player.user_id,
                     Answer.is_correct == True
                 ).count()
+                
+                logger.debug(f"Player {player.user_id} has {correct_count} correct answers in round {round_id}")
                 
                 # Get user name
                 user = session.query(User).filter(User.id == player.user_id).first()
