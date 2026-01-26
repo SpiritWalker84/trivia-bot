@@ -60,8 +60,10 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
         import time
         time.sleep(0.5)  # Small delay to ensure displayed_at is set
         
-        # Get question number for logging (in separate session to avoid session issues)
+        # Check if question was actually sent (displayed_at is set)
+        # If not, retry sending after a delay
         question_number = None
+        question_was_sent = False
         with db_session() as session:
             round_question = session.query(RoundQuestion).filter(
                 RoundQuestion.id == round_question_id
@@ -69,8 +71,10 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
             
             if round_question:
                 question_number = round_question.question_number
+                session.refresh(round_question)  # Get latest displayed_at status
                 
                 if round_question.displayed_at:
+                    question_was_sent = True
                     # Calculate exact delay from displayed_at
                     elapsed = (datetime.now(pytz.UTC) - round_question.displayed_at).total_seconds()
                     remaining_time = max(0, config.config.QUESTION_TIME_LIMIT - elapsed)
@@ -79,31 +83,42 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
                     delay = max(int(remaining_time) + 3, config.config.QUESTION_TIME_LIMIT + 3)
                     logger.info(f"Using displayed_at for timing: elapsed={elapsed:.2f}s, remaining={remaining_time:.2f}s, delay={delay}s")
                 else:
-                    # Fallback: use full time limit + 3 second buffer
-                    delay = config.config.QUESTION_TIME_LIMIT + 3
-                    logger.warning(f"displayed_at not set for question {round_question_id}, using fallback delay {delay}s")
+                    # Question was not sent (likely due to Flood control)
+                    # Retry sending after a delay
+                    logger.warning(
+                        f"Question {round_question_id} (question_number={question_number}) was not sent "
+                        f"(displayed_at is None). This might be due to Flood control. Retrying in 5 seconds..."
+                    )
+                    # Retry sending after 5 seconds (exponential backoff would be better, but simple retry for now)
+                    send_question_to_players.apply_async(
+                        args=[game_id, round_id, round_question_id],
+                        countdown=5
+                    )
+                    return  # Don't schedule collect_answers yet
             else:
                 # Fallback: use full time limit + 3 second buffer
                 delay = config.config.QUESTION_TIME_LIMIT + 3
                 logger.warning(f"RoundQuestion {round_question_id} not found, using fallback delay {delay}s")
         
-        # Schedule answer collection after time limit (with buffer to let timer reach 0)
-        collect_answers.apply_async(
-            args=[game_id, round_id, round_question_id],
-            countdown=delay
-        )
-        logger.info(f"Scheduled collect_answers for question {round_question_id} with delay {delay} seconds")
-        
-        # Log which question was actually sent
-        if question_number:
-            logger.info(
-                f"send_question_to_players: Question {round_question_id} (question_number={question_number}) "
-                f"sent to players in game {game_id}, round_id={round_id}"
+        # Only schedule collect_answers if question was successfully sent
+        if question_was_sent:
+            # Schedule answer collection after time limit (with buffer to let timer reach 0)
+            collect_answers.apply_async(
+                args=[game_id, round_id, round_question_id],
+                countdown=delay
             )
+            logger.info(f"Scheduled collect_answers for question {round_question_id} with delay {delay} seconds")
+            
+            # Log which question was actually sent
+            if question_number:
+                logger.info(
+                    f"send_question_to_players: Question {round_question_id} (question_number={question_number}) "
+                    f"sent to players in game {game_id}, round_id={round_id}"
+                )
         else:
             logger.warning(
-                f"send_question_to_players: Question {round_question_id} not found after sending! "
-                f"game_id={game_id}, round_id={round_id}"
+                f"send_question_to_players: Question {round_question_id} (question_number={question_number}) "
+                f"was not sent successfully. Retry scheduled."
             )
         
     except Exception as e:
