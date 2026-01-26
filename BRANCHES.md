@@ -2,7 +2,9 @@
 
 ## Стабильная версия
 
-Текущая стабильная версия помечена тегом `v1.0-stable`.
+Текущая стабильная версия помечена тегом `v1.1-stable`.
+
+Предыдущая стабильная версия: `v1.0-stable`.
 
 ### Переключение на стабильную версию
 
@@ -10,16 +12,19 @@
 
 ```bash
 # Переключиться на тег (detached HEAD)
-git checkout v1.0-stable
+git checkout v1.1-stable
 
 # Или создать ветку от стабильной версии
-git checkout -b stable-backup v1.0-stable
+git checkout -b stable-backup v1.1-stable
+
+# Для возврата к предыдущей версии
+git checkout v1.0-stable
 ```
 
 ### Создание новой ветки от стабильной версии
 
 ```bash
-git checkout -b new-feature v1.0-stable
+git checkout -b new-feature v1.1-stable
 ```
 
 ## Ветка разработки leaderboard
@@ -63,10 +68,13 @@ git push origin main
 git checkout main
 
 # Откатить к стабильной версии
-git reset --hard v1.0-stable
+git reset --hard v1.1-stable
 
 # Принудительно обновить удаленную ветку (ОСТОРОЖНО!)
 git push origin main --force
+
+# Для отката к предыдущей версии
+git reset --hard v1.0-stable
 ```
 
 ### Просмотр всех тегов
