@@ -262,26 +262,25 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
                     )
                     return
                 
-                # CRITICAL: If last displayed is significantly behind current, we have a serious gap
-                # This means questions were skipped - we should NOT continue
+                # Check for sequence gap
+                # Allow small gaps (1-2 questions) as they might be due to Flood control or timing issues
                 gap = current_question_number - last_displayed_number
-                if gap > 1:
+                if gap > 2:
+                    # Large gap (>2) - this is a serious problem, abort
                     logger.error(
                         f"SEQUENCE GAP ERROR: Current question is {current_question_number}, "
                         f"but last displayed is {last_displayed_number} (gap of {gap}). "
                         f"This indicates questions were skipped. Aborting to prevent further issues."
                     )
                     return
-                
-                # If gap is exactly 1, it means current question wasn't displayed yet
-                # This should not happen in normal flow, but could be a timing issue
-                if gap == 1:
+                elif gap > 0:
+                    # Small gap (1-2) - might be due to Flood control, allow but log warning
                     logger.warning(
-                        f"SEQUENCE WARNING: Current question is {current_question_number}, "
-                        f"but last displayed is {last_displayed_number}. "
-                        f"Current question may not have been displayed yet. Skipping to prevent out-of-order sends."
+                        f"SEQUENCE GAP: Current question is {current_question_number}, "
+                        f"but last displayed is {last_displayed_number} (gap of {gap}). "
+                        f"This might be due to Flood control. Continuing anyway."
                     )
-                    return
+                    # Continue - don't return, allow sending next question
             
             # Get next question
             next_question = session.query(RoundQuestion).filter(
