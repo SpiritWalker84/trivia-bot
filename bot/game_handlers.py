@@ -95,20 +95,29 @@ async def handle_answer(
         
         # Check if answer is correct (use shuffled correct option if available)
         # Only use shuffled option if both shuffled_options and correct_option_shuffled are set
-        has_shuffled = bool(round_question.shuffled_options and round_question.correct_option_shuffled)
+        shuffled_opts = round_question.shuffled_options
+        correct_shuffled = round_question.correct_option_shuffled
+        original_correct = question.correct_option
+        
+        logger.info(f"[ANSWER_CHECK] round_question_id={round_question_id}, question_id={question.id}")
+        logger.info(f"[ANSWER_CHECK] shuffled_options={shuffled_opts}, correct_option_shuffled={correct_shuffled}, original_correct={original_correct}")
+        logger.info(f"[ANSWER_CHECK] user selected={selected_option.upper()}")
+        
+        has_shuffled = bool(shuffled_opts and correct_shuffled)
         
         if has_shuffled:
-            correct_option = round_question.correct_option_shuffled
-            logger.info(f"Using SHUFFLED correct option: {correct_option} (original was {question.correct_option})")
-            logger.info(f"Shuffled mapping: {round_question.shuffled_options}")
+            correct_option = correct_shuffled.upper()
+            logger.info(f"[ANSWER_CHECK] Using SHUFFLED correct option: {correct_option} (original was {original_correct})")
+            logger.info(f"[ANSWER_CHECK] Shuffled mapping: {shuffled_opts}")
         else:
             # Fallback to original correct option (backward compatibility or no shuffling)
-            correct_option = question.correct_option
-            logger.info(f"Using ORIGINAL correct option: {correct_option} (shuffled_options={bool(round_question.shuffled_options)}, correct_option_shuffled={round_question.correct_option_shuffled})")
+            correct_option = original_correct.upper()
+            logger.info(f"[ANSWER_CHECK] Using ORIGINAL correct option: {correct_option} (has_shuffled={has_shuffled})")
         
-        logger.info(f"Answer check: user selected={selected_option.upper()}, correct={correct_option.upper()}, question_id={question.id}, round_question_id={round_question_id}")
-        is_correct = (selected_option.upper() == correct_option.upper())
-        logger.info(f"Answer is {'CORRECT' if is_correct else 'INCORRECT'}: user selected {selected_option}, correct was {correct_option}")
+        selected_upper = selected_option.upper()
+        logger.info(f"[ANSWER_CHECK] Comparison: selected='{selected_upper}' vs correct='{correct_option}' (equal={selected_upper == correct_option})")
+        is_correct = (selected_upper == correct_option)
+        logger.info(f"[ANSWER_CHECK] Result: {'CORRECT ✓' if is_correct else 'INCORRECT ✗'} - user selected {selected_option}, correct was {correct_option}")
         
         # Get game and game_player
         game = session.query(Game).filter(Game.id == round_obj.game_id).first()
