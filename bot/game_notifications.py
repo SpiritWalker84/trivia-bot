@@ -389,7 +389,9 @@ class GameNotifications:
             
             results = {}
             # Send to alive players (with answer buttons)
-            for game_player in alive_players:
+            # Add small delay between sends to avoid Flood control
+            import asyncio
+            for i, game_player in enumerate(alive_players):
                 # Skip bots (they answer automatically)
                 if game_player.is_bot:
                     continue
@@ -398,6 +400,11 @@ class GameNotifications:
                 user = session.query(User).filter(User.id == game_player.user_id).first()
                 if not user or not user.telegram_id:
                     continue
+                
+                # Add delay between sends (0.15 seconds) to avoid Flood control
+                # Telegram allows ~20 messages per second, so 0.15s = ~6-7 messages per second is safe
+                if i > 0:  # Don't delay first player
+                    await asyncio.sleep(0.15)
                 
                 success = await self.send_question_to_player(
                     user.telegram_id,
