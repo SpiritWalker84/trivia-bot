@@ -140,11 +140,11 @@ def finish_round_task(game_id: int, round_number: int) -> None:
             logger.info(f"Game {game_id}: Only {alive_count} player(s) alive, finishing game")
             finish_game_task.delay(game_id)
         elif round_number < config.config.ROUNDS_PER_GAME:
-            # Continue to next round after 30 second pause
+            # Continue to next round after 60 second pause
             next_round = round_number + 1
-            logger.info(f"Game {game_id}: Continuing to round {next_round} (current: {round_number}, max: {config.config.ROUNDS_PER_GAME}) after 30 second pause")
+            logger.info(f"Game {game_id}: Continuing to round {next_round} (current: {round_number}, max: {config.config.ROUNDS_PER_GAME}) after 60 second pause")
             
-            # Send pause notification
+            # Send pause notification with timer
             try:
                 bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
                 notifications = GameNotifications(bot)
@@ -155,10 +155,10 @@ def finish_round_task(game_id: int, round_number: int) -> None:
             except Exception as e:
                 logger.error(f"Failed to send pause notification: {e}", exc_info=True)
             
-            # Schedule next round after 30 seconds
+            # Schedule next round after 60 seconds
             start_next_round_task.apply_async(
                 args=[game_id, next_round],
-                countdown=30  # 30 second pause to let players review results
+                countdown=60  # 60 second pause to let players review results
             )
         else:
             # Last round finished

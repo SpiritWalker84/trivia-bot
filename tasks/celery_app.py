@@ -18,6 +18,7 @@ def create_celery_app() -> Celery:
             "tasks.question_sender",
             "tasks.bot_answers",
             "tasks.question_timer",
+            "tasks.round_pause_timer",
             "tasks.elimination_auto_leave",
         ]
     )
