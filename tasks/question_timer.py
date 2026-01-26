@@ -105,21 +105,6 @@ def update_question_timer(
             f"❓ {question.question_text}\n\n"
         )
         
-        # Add leaderboard
-        # Get user_id from database using telegram_id
-        from bot.game_notifications import get_round_leaderboard_text
-        from database.models import User
-        db_user = session.query(User).filter(User.telegram_id == user_id).first()
-        current_user_id = db_user.id if db_user else None
-        
-        leaderboard_text = get_round_leaderboard_text(
-            round_obj.game_id if round_obj else None,
-            round_id,
-            current_user_id
-        )
-        if leaderboard_text:
-            question_text += f"\n{leaderboard_text}\n"
-        
         # Visual progress bar
         total_bars = 20
         filled_bars = int((remaining / time_limit) * total_bars) if time_limit > 0 else 0
