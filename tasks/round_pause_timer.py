@@ -61,11 +61,16 @@ def update_round_pause_timer(
     from database.session import db_session
     from database.models import Game
     
-    # Check if game still exists and is in progress
+    # Check if game still exists and is in progress, and round hasn't started yet
     with db_session() as session:
         game = session.query(Game).filter(Game.id == game_id).first()
         if not game or game.status != 'in_progress':
             logger.debug(f"Game {game_id} is not in_progress, stopping pause timer")
+            return
+        
+        # Check if round has already started (current_round >= next_round)
+        if game.current_round and game.current_round >= next_round:
+            logger.debug(f"Round {next_round} has already started (current_round={game.current_round}), stopping pause timer")
             return
     
     # Build pause message with timer
@@ -97,6 +102,13 @@ def update_round_pause_timer(
         logger.warning(f"Could not update pause timer message: {e}", exc_info=True)
     
     # Schedule next update if time remaining
+    # Double-check that round hasn't started
+    with db_session() as session:
+        game = session.query(Game).filter(Game.id == game_id).first()
+        if game and game.current_round and game.current_round >= next_round:
+            logger.debug(f"Round {next_round} has already started (current_round={game.current_round}), stopping pause timer")
+            return
+    
     if remaining > 1:
         update_round_pause_timer.apply_async(
             args=[game_id, next_round, user_id, message_id, remaining - 1, time_limit],

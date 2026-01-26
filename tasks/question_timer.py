@@ -99,13 +99,13 @@ def update_question_timer(
             if theme:
                 theme_text = f" | Тема: {theme.name}"
         
+        # Start with header
         question_text = (
             f"🏁 Раунд {round_obj.round_number}/{config.config.ROUNDS_PER_GAME}{theme_text}\n"
             f"Вопрос {rq.question_number}/{config.config.QUESTIONS_PER_ROUND}:\n\n"
-            f"❓ {question.question_text}\n\n"
         )
         
-        # Add leaderboard if available (only if not first question)
+        # Add leaderboard FIRST (before question) if available (only if not first question)
         if rq.question_number > 1 and round_obj:
             try:
                 from bot.round_leaderboard import get_round_leaderboard
@@ -126,6 +126,9 @@ def update_question_timer(
             except Exception as e:
                 logger.warning(f"Failed to add leaderboard to timer update: {e}", exc_info=True)
                 # Continue without leaderboard
+        
+        # Add question text AFTER leaderboard (so it's visible on mobile)
+        question_text += f"❓ {question.question_text}\n\n"
         
         # Visual progress bar
         total_bars = 20
