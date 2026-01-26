@@ -105,6 +105,10 @@ class GameNotifications:
             question_text += f"\n⏱️ {time_limit} сек [{progress_bar}]"
             
             # Create keyboard
+            logger.info(f"[SEND_QUESTION] Creating keyboard with options: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}")
+            logger.info(f"[SEND_QUESTION] Original options: A={question.option_a[:50] if question.option_a else 'N/A'}, B={question.option_b[:50] if question.option_b else 'N/A'}, C={question.option_c[:50] if question.option_c else 'N/A'}, D={question.option_d[:50] if question.option_d else 'N/A'}")
+            logger.info(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}")
+            
             keyboard = QuestionAnswerKeyboard.get_keyboard(
                 round_question.id,
                 options
