@@ -110,15 +110,19 @@ class GameNotifications:
                     # Continue without leaderboard if there's an error
             
             # Build options using shuffled mapping if available
+            # Reload round_question in a new session to avoid session binding issues
             options = {}
-            has_shuffled = bool(round_question.shuffled_options)
-            
-            # Explicitly access shuffled_options to ensure it's loaded from DB
-            shuffled_opts = round_question.shuffled_options
-            
-            if has_shuffled:
-                # Use shuffled options
-                shuffled_mapping = round_question.shuffled_options
+            with db_session() as session:
+                rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question.id).first()
+                if not rq:
+                    logger.error(f"RoundQuestion {round_question.id} not found in session for send_question_to_player")
+                    return False
+                
+                has_shuffled = bool(rq.shuffled_options)
+                
+                if has_shuffled:
+                    # Use shuffled options
+                    shuffled_mapping = rq.shuffled_options
                 # shuffled_mapping maps new_position -> original_position
                 # So we need to get the original option text for each new position
                 for new_pos in ['A', 'B', 'C', 'D']:
