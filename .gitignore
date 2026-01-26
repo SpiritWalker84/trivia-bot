@@ -66,3 +66,16 @@ celerybeat.pid
 
 # Migration files (keep structure, ignore specific migrations if needed)
 # database/migrations/versions/*.py
+
+# Accidentally installed packages in project root
+bin/
+certifi/
+certifi-*.dist-info/
+charset_normalizer/
+charset_normalizer-*.dist-info/
+idna/
+idna-*.dist-info/
+requests/
+requests-*.dist-info/
+urllib3/
+urllib3-*.dist-info/
