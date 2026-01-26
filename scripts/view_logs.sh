@@ -15,10 +15,11 @@ echo "4. Search for user_shared events"
 echo "5. Search for invitation/notification sending"
 echo "6. Search for private game events"
 echo "7. Search for shuffled options / answer checking"
-echo "8. Search for specific text"
+echo "8. Search for question sequence errors (SEQUENCE ERROR, skipping, etc.)"
+echo "9. Search for specific text"
 echo ""
 
-read -p "Enter choice [1-8]: " choice
+read -p "Enter choice [1-9]: " choice
 
 case $choice in
     1)
@@ -59,6 +60,17 @@ case $choice in
         grep -B 3 -A 3 -i "Answer is\|Using.*correct option" "$LOG_FILE" | tail -n 150
         ;;
     8)
+        echo "Searching for question sequence errors..."
+        echo "=== SEQUENCE ERROR messages ==="
+        grep -i "SEQUENCE ERROR\|was already displayed\|skipping.*question\|Question.*was already sent" "$LOG_FILE" | tail -n 50
+        echo ""
+        echo "=== send_next_question calls ==="
+        grep -i "send_next_question\|Scheduling next question" "$LOG_FILE" | tail -n 50
+        echo ""
+        echo "=== Full context around sequence errors ==="
+        grep -B 10 -A 10 -i "SEQUENCE ERROR\|was already displayed.*Skipping" "$LOG_FILE" | tail -n 100
+        ;;
+    9)
         read -p "Enter search text: " search_text
         echo "Searching for: $search_text"
         grep -i "$search_text" "$LOG_FILE" | tail -n 50
