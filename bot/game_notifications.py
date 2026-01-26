@@ -157,11 +157,11 @@ class GameNotifications:
             progress_bar = "▓" * filled_bars
             question_text += f"\n⏱️ {time_limit} сек [{progress_bar}]"
             
-                # Create keyboard (use rq.id from the session)
-                keyboard = QuestionAnswerKeyboard.get_keyboard(
-                    rq.id,
-                    options
-                )
+            # Create keyboard (use round_question_id from the session)
+            keyboard = QuestionAnswerKeyboard.get_keyboard(
+                round_question_id,
+                options
+            )
             
             # Remove main menu keyboard when sending first question
             from telegram import ReplyKeyboardRemove
@@ -190,7 +190,7 @@ class GameNotifications:
             # Update displayed_at
             with db_session() as session:
                 round_question_obj = session.query(RoundQuestion).filter(
-                    RoundQuestion.id == round_question.id
+                    RoundQuestion.id == round_question_id
                 ).first()
                 if round_question_obj:
                     round_question_obj.displayed_at = datetime.now(pytz.UTC)
@@ -205,10 +205,10 @@ class GameNotifications:
                 # Fallback: get from round_question
                 with db_session() as session:
                     rq = session.query(RoundQuestion).filter(
-                        RoundQuestion.id == round_question.id
+                        RoundQuestion.id == round_question_id
                     ).first()
                     if not rq:
-                        logger.error(f"RoundQuestion {round_question.id} not found")
+                        logger.error(f"RoundQuestion {round_question_id} not found")
                         return True
                     
                     round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
@@ -223,11 +223,11 @@ class GameNotifications:
             from utils.logging import get_logger
             timer_logger = get_logger(__name__)
             time_limit = self.config.QUESTION_TIME_LIMIT
-            timer_logger.info(f"Starting timer for question {round_question.id}, user {user_id}, round_id={timer_round_id}, time_limit={time_limit}")
+            timer_logger.info(f"Starting timer for question {round_question_id}, user {user_id}, round_id={timer_round_id}, time_limit={time_limit}")
             start_question_timer.delay(
                 game_id=timer_game_id,
                 round_id=timer_round_id,
-                round_question_id=round_question.id,
+                round_question_id=round_question_id,
                 user_id=user_id,
                 message_id=message.message_id,
                 time_limit=time_limit
