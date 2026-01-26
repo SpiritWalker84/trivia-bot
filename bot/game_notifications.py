@@ -88,13 +88,14 @@ class GameNotifications:
             
             # Build question text
             theme_text = f" | Тема: {theme_name}" if theme_name else ""
+            
+            # Start with header
             question_text = (
                 f"🏁 Раунд {round_number}/{self.config.ROUNDS_PER_GAME}{theme_text}\n"
                 f"Вопрос {question_number}/{self.config.QUESTIONS_PER_ROUND}:\n\n"
-                f"❓ {question.question_text}\n\n"
             )
             
-            # Add leaderboard if available (only if not first question, to avoid clutter)
+            # Add leaderboard FIRST (before question) if available (only if not first question, to avoid clutter)
             if question_number > 1 and resolved_game_id and resolved_round_id:
                 try:
                     from bot.round_leaderboard import get_round_leaderboard
@@ -108,6 +109,9 @@ class GameNotifications:
                 except Exception as e:
                     logger.warning(f"Failed to add leaderboard to question: {e}", exc_info=True)
                     # Continue without leaderboard if there's an error
+            
+            # Add question text AFTER leaderboard (so it's visible on mobile)
+            question_text += f"❓ {question.question_text}\n\n"
             
             # Build options using shuffled mapping if available
             # Reload round_question in a new session to avoid session binding issues
