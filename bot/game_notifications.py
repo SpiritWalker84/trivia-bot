@@ -487,13 +487,21 @@ class GameNotifications:
                                 "Что вы хотите сделать?"
                             )
                             try:
-                                await self.bot.send_message(
+                                message = await self.bot.send_message(
                                     chat_id=eliminated_user.telegram_id,
                                     text=choice_text,
                                     reply_markup=EliminationChoiceKeyboard.get_keyboard(
                                         game_id, eliminated_user_id
                                     )
                                 )
+                                
+                                # Schedule automatic leave after 1 minute if no response
+                                from tasks.elimination_auto_leave import auto_leave_game
+                                auto_leave_game.apply_async(
+                                    args=[game_id, eliminated_user_id],
+                                    countdown=60  # 1 minute
+                                )
+                                logger.info(f"Scheduled auto-leave for eliminated player {eliminated_user_id} in game {game_id} after 60 seconds")
                             except Exception as e:
                                 logger.error(f"Failed to send elimination choice to {eliminated_user.telegram_id}: {e}")
     

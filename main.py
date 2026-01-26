@@ -372,10 +372,21 @@ async def handle_elimination_choice(update: Update, context, data: str) -> None:
         elif choice == "leave":
             game_player.is_spectator = False
             game_player.left_game = True
+            session.commit()
+            
+            # Show main menu after leaving
+            from bot.keyboards import MainMenuKeyboard
             await query.message.edit_text(
                 "👋 Вы вышли из игры.\n\n"
                 "Вы больше не будете получать уведомления об этой игре."
             )
+            await query.message.reply_text(
+                "Главное меню:",
+                reply_markup=MainMenuKeyboard.get_keyboard()
+            )
+            
+            logger.info(f"Player {user_id} chose {choice} for game {game_id}")
+            return
         else:
             await query.answer("Неизвестный выбор", show_alert=True)
             return
