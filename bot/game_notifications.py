@@ -62,7 +62,9 @@ class GameNotifications:
             options = {}
             has_shuffled = bool(round_question.shuffled_options)
             
-            logger.info(f"send_question_to_player: round_question.id={round_question.id}, question.id={question.id}, shuffled_options={round_question.shuffled_options}, correct_option_shuffled={round_question.correct_option_shuffled}")
+            # Explicitly access shuffled_options to ensure it's loaded from DB
+            shuffled_opts = round_question.shuffled_options
+            logger.info(f"[SEND_QUESTION] round_question.id={round_question.id}, question.id={question.id}, shuffled_options={shuffled_opts}, correct_option_shuffled={round_question.correct_option_shuffled}, has_shuffled={bool(shuffled_opts)}")
             
             if has_shuffled:
                 # Use shuffled options
