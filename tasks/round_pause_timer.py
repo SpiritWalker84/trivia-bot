@@ -59,18 +59,32 @@ def update_round_pause_timer(
         time_limit: Total time limit in seconds
     """
     from database.session import db_session
-    from database.models import Game
+    from database.models import Game, Round
     
     # Check if game still exists and is in progress, and round hasn't started yet
     with db_session() as session:
         game = session.query(Game).filter(Game.id == game_id).first()
-        if not game or game.status != 'in_progress':
-            logger.debug(f"Game {game_id} is not in_progress, stopping pause timer")
+        if not game:
+            logger.debug(f"Game {game_id} not found, stopping pause timer")
+            return
+        
+        if game.status != 'in_progress':
+            logger.debug(f"Game {game_id} is not in_progress (status: {game.status}), stopping pause timer")
             return
         
         # Check if round has already started (current_round >= next_round)
         if game.current_round and game.current_round >= next_round:
             logger.debug(f"Round {next_round} has already started (current_round={game.current_round}), stopping pause timer")
+            return
+        
+        # Also check if the round object exists and is in progress (more reliable check)
+        round_obj = session.query(Round).filter(
+            Round.game_id == game_id,
+            Round.round_number == next_round
+        ).first()
+        
+        if round_obj and round_obj.status == 'in_progress':
+            logger.debug(f"Round {next_round} already exists and is in_progress, stopping pause timer")
             return
     
     # Build pause message with timer
@@ -88,25 +102,53 @@ def update_round_pause_timer(
     pause_text += f"⏱️ {remaining} сек [{progress_bar}]"
     
     try:
-        logger.info(f"Updating pause timer: remaining={remaining}, time_limit={time_limit}, user_id={user_id}, message_id={message_id}")
+        logger.debug(f"Updating pause timer: remaining={remaining}, time_limit={time_limit}, user_id={user_id}, message_id={message_id}")
         bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
         import asyncio
+        from telegram.error import TelegramError, BadRequest
+        
         asyncio.run(bot.edit_message_text(
             chat_id=user_id,
             message_id=message_id,
             text=pause_text,
             parse_mode="Markdown"
         ))
-        logger.info(f"Pause timer updated successfully: remaining={remaining}")
+        logger.debug(f"Pause timer updated successfully: remaining={remaining}")
+    except BadRequest as e:
+        # Message might have been deleted or changed - stop timer
+        if "message to edit not found" in str(e).lower() or "message is not modified" in str(e).lower():
+            logger.debug(f"Pause timer message not found or not modified for user {user_id}, stopping timer")
+            return
+        else:
+            logger.warning(f"Could not update pause timer message (BadRequest): {e}", exc_info=True)
+    except TelegramError as e:
+        # Other Telegram errors - stop timer to avoid spam
+        logger.warning(f"Telegram error updating pause timer message: {e}, stopping timer")
+        return
     except Exception as e:
-        logger.warning(f"Could not update pause timer message: {e}", exc_info=True)
+        logger.warning(f"Could not update pause timer message: {e}, stopping timer", exc_info=True)
+        return
     
     # Schedule next update if time remaining
-    # Double-check that round hasn't started
+    # Double-check that round hasn't started before scheduling next update
     with db_session() as session:
         game = session.query(Game).filter(Game.id == game_id).first()
-        if game and game.current_round and game.current_round >= next_round:
+        if not game or game.status != 'in_progress':
+            logger.debug(f"Game {game_id} is not in_progress, stopping pause timer")
+            return
+        
+        if game.current_round and game.current_round >= next_round:
             logger.debug(f"Round {next_round} has already started (current_round={game.current_round}), stopping pause timer")
+            return
+        
+        # Also check if the round object exists and is in progress
+        round_obj = session.query(Round).filter(
+            Round.game_id == game_id,
+            Round.round_number == next_round
+        ).first()
+        
+        if round_obj and round_obj.status == 'in_progress':
+            logger.debug(f"Round {next_round} already exists and is in_progress, stopping pause timer")
             return
     
     if remaining > 1:
