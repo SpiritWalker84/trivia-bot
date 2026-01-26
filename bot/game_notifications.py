@@ -292,15 +292,24 @@ class GameNotifications:
             if not round_question:
                 return {}
             
-            # Explicitly access shuffled_options to ensure it's loaded
+            # Explicitly access shuffled_options to ensure it's loaded from DB
             shuffled_opts = round_question.shuffled_options
-            logger.info(f"send_question_to_all_players: round_question.id={round_question.id}, shuffled_options={shuffled_opts}, correct_option_shuffled={round_question.correct_option_shuffled}")
+            correct_shuffled = round_question.correct_option_shuffled
+            logger.info(f"[SEND_TO_ALL] round_question.id={round_question.id}, shuffled_options={shuffled_opts}, correct_option_shuffled={correct_shuffled}")
             
             question = session.query(Question).filter(
                 Question.id == round_question.question_id
             ).first()
             if not question:
                 return {}
+            
+            # IMPORTANT: Access all fields we need while still in session context
+            # Store values in local variables to avoid detached instance issues
+            round_question_id_local = round_question.id
+            round_number_local = round_obj.round_number
+            question_number_local = round_question.question_number
+            shuffled_options_local = shuffled_opts
+            correct_option_shuffled_local = correct_shuffled
             
             # Get theme name
             theme_name = None
@@ -332,12 +341,20 @@ class GameNotifications:
                 if not user or not user.telegram_id:
                     continue
                 
+                # Create a fresh round_question object with all needed data
+                # to avoid detached instance issues
+                from database.models import RoundQuestion as RQ
+                # Re-query round_question to ensure it's fresh and attached
+                fresh_rq = session.query(RQ).filter(RQ.id == round_question_id_local).first()
+                if not fresh_rq:
+                    continue
+                
                 success = await self.send_question_to_player(
                     user.telegram_id,
-                    round_question,
+                    fresh_rq,
                     question,
-                    round_obj.round_number,
-                    round_question.question_number,
+                    round_number_local,
+                    question_number_local,
                     theme_name
                 )
                 results[user.telegram_id] = success
