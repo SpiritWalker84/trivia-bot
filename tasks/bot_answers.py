@@ -68,18 +68,36 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
             if existing_answer:
                 continue
             
-            # Get bot difficulty
-            difficulty_str = game_player.bot_difficulty or 'novice'
+            # Get bot difficulty - prefer game's difficulty setting over player's stored difficulty
+            # This fixes cases where games were created before the fix
+            game_difficulty = None
+            if game_ref and game_ref.bot_difficulty:
+                game_difficulty = game_ref.bot_difficulty
+                # If player's difficulty doesn't match game's, fix it
+                if game_player.bot_difficulty != game_difficulty:
+                    logger.warning(
+                        f"Bot {game_player.user_id} (player {game_player.id}) has wrong difficulty "
+                        f"'{game_player.bot_difficulty}', should be '{game_difficulty}'. Fixing..."
+                    )
+                    game_player.bot_difficulty = game_difficulty
+                    session.commit()
+            
+            # Use game difficulty if available, otherwise fall back to player's stored difficulty
+            difficulty_str = game_difficulty or game_player.bot_difficulty or 'novice'
             try:
                 difficulty = BotDifficulty(difficulty_str)
             except ValueError:
                 difficulty = BotDifficulty.NOVICE
+                difficulty_str = 'novice'
             
             # Create bot AI
             bot_ai = BotAI(difficulty)
             
             # Log bot difficulty for debugging
-            logger.info(f"Bot {game_player.user_id} (player {game_player.id}) using difficulty: {difficulty_str} (accuracy: {bot_ai.accuracy:.1%})")
+            logger.info(
+                f"Bot {game_player.user_id} (player {game_player.id}) using difficulty: {difficulty_str} "
+                f"(accuracy: {bot_ai.accuracy:.1%}, game_difficulty: {game_ref.bot_difficulty if game_ref else None})"
+            )
             
             # Get available options (after shuffling)
             options = []
