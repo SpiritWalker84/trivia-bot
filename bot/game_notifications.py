@@ -620,14 +620,9 @@ class GameNotifications:
                 if gp.is_eliminated and gp.is_spectator is True and not gp.left_game
             ]
             
-            pause_text = (
-                f"⏸️ Пауза между раундами\n\n"
-                f"Следующий раунд ({next_round_number}/{self.config.ROUNDS_PER_GAME}) "
-                f"начнется через 30 секунд.\n"
-                f"У вас есть время, чтобы посмотреть результаты."
-            )
+            time_limit = 60  # 60 seconds pause
             
-            # Send to all alive players
+            # Send to all alive players with timer
             for game_player in alive_players:
                 if game_player.is_bot:
                     continue
@@ -635,9 +630,33 @@ class GameNotifications:
                 user = session.query(User).filter(User.id == game_player.user_id).first()
                 if user and user.telegram_id:
                     try:
-                        await self.bot.send_message(
+                        # Build pause message with initial timer
+                        total_bars = 20
+                        filled_bars = total_bars
+                        progress_bar = "▓" * filled_bars
+                        
+                        pause_text = (
+                            f"⏸️ Пауза между раундами\n\n"
+                            f"Следующий раунд ({next_round_number}/{self.config.ROUNDS_PER_GAME}) "
+                            f"начнется через {time_limit} секунд.\n"
+                            f"У вас есть время, чтобы посмотреть результаты.\n\n"
+                            f"⏱️ {time_limit} сек [{progress_bar}]"
+                        )
+                        
+                        message = await self.bot.send_message(
                             chat_id=user.telegram_id,
-                            text=pause_text
+                            text=pause_text,
+                            parse_mode="Markdown"
+                        )
+                        
+                        # Start countdown timer
+                        from tasks.round_pause_timer import start_round_pause_timer
+                        start_round_pause_timer.delay(
+                            game_id=game_id,
+                            next_round=next_round_number,
+                            user_id=user.telegram_id,
+                            message_id=message.message_id,
+                            time_limit=time_limit
                         )
                     except Exception as e:
                         logger.error(f"Failed to send pause notification to {user.telegram_id}: {e}")
