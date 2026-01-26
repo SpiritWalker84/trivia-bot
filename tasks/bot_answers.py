@@ -262,9 +262,14 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
             )
             return
         
-        # Check if next question was already displayed (protection against duplicate sends)
+        # Double-check: verify next question hasn't been displayed yet
+        # Refresh from database to get latest state (important for race conditions)
+        session.refresh(next_question)
         if next_question.displayed_at:
-            logger.warning(f"Question {next_question_number} was already sent (displayed_at: {next_question.displayed_at}), skipping duplicate send")
+            logger.warning(
+                f"Question {next_question_number} was already sent "
+                f"(displayed_at: {next_question.displayed_at}), skipping duplicate send"
+            )
             return
         
         # Send next question with a short delay (1-2 seconds)
