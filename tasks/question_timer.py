@@ -63,6 +63,15 @@ def update_question_timer(
     """
     from database.session import db_session
     from database.models import RoundQuestion, Answer, Round, Question, Theme
+
+    # Aggressive anti-flood: update only on key checkpoints
+    def _get_checkpoints(limit: int) -> list[int]:
+        base_points = [30, 20, 15, 10, 5, 3, 2, 1]
+        points = {max(1, int(limit))}
+        for p in base_points:
+            if p < limit:
+                points.add(p)
+        return sorted(points, reverse=True)
     
     # Check if user already answered (stop timer if answered)
     with db_session() as session:
@@ -188,9 +197,12 @@ def update_question_timer(
         logger.warning(f"Could not update timer message: {e}", exc_info=True)
         # Don't return - continue scheduling next update
     
-    # Schedule next update if time remaining
-    interval = max(1, int(config.config.TIMER_UPDATE_INTERVAL_SEC))
-    if remaining > interval:
+    # Schedule next update if time remaining (checkpoint-based)
+    checkpoints = _get_checkpoints(time_limit)
+    remaining = max(1, int(remaining))
+    next_points = [p for p in checkpoints if p < remaining]
+    if next_points:
+        next_remaining = max(next_points)
         # Check if question is still active before scheduling next update
         with db_session() as session:
             # Check if user answered
@@ -216,12 +228,12 @@ def update_question_timer(
                     logger.debug(f"Next question already displayed (question_number={next_question.question_number}), stopping timer for round_question_id={round_question_id}")
                     return
         
-        # Schedule next update with a larger interval to reduce Telegram load
-        next_remaining = max(remaining - interval, 0)
+        # Schedule next update at the next checkpoint
+        countdown = max(1, remaining - next_remaining)
         update_question_timer.apply_async(
             args=[game_id, round_id, round_question_id, user_id, message_id, next_remaining, time_limit],
-            countdown=interval
+            countdown=countdown
         )
     else:
-        # Time expired, stop timer
-        logger.debug(f"Time expired for round_question_id={round_question_id}, user_id={user_id}, stopping timer")
+        # No further checkpoints - stop timer
+        logger.debug(f"Timer reached last checkpoint for round_question_id={round_question_id}, user_id={user_id}, stopping timer")

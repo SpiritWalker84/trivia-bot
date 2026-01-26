@@ -60,6 +60,15 @@ def update_round_pause_timer(
     """
     from database.session import db_session
     from database.models import Game, Round
+
+    # Aggressive anti-flood: update only on key checkpoints
+    def _get_checkpoints(limit: int) -> list[int]:
+        base_points = [60, 45, 30, 20, 15, 10, 5, 3, 2, 1]
+        points = {max(1, int(limit))}
+        for p in base_points:
+            if p < limit:
+                points.add(p)
+        return sorted(points, reverse=True)
     
     # Check if game still exists and is in progress, and round hasn't started yet
     with db_session() as session:
@@ -172,11 +181,15 @@ def update_round_pause_timer(
             return
     
     interval = max(1, int(config.config.TIMER_UPDATE_INTERVAL_SEC))
-    if remaining > interval:
-        next_remaining = max(remaining - interval, 0)
+    checkpoints = _get_checkpoints(time_limit)
+    remaining = max(1, int(remaining))
+    next_points = [p for p in checkpoints if p < remaining]
+    if next_points:
+        next_remaining = max(next_points)
+        countdown = max(1, remaining - next_remaining)
         update_round_pause_timer.apply_async(
             args=[game_id, next_round, user_id, message_id, next_remaining, time_limit],
-            countdown=interval
+            countdown=countdown
         )
     else:
-        logger.debug(f"Pause timer finished for game {game_id}, next round {next_round}")
+        logger.debug(f"Pause timer reached last checkpoint for game {game_id}, next round {next_round}")
