@@ -111,12 +111,13 @@ async def handle_private_game_create_with_friends(update: Update, context) -> No
             total_rounds=10
         )
         
-        # Add creator as first player
+        # Add creator as first player (auto-confirmed)
         creator_player = GamePlayer(
             game_id=game.id,
             user_id=db_creator.id,
             is_bot=False,
-            join_order=1
+            join_order=1,
+            is_confirmed=True
         )
         session.add(creator_player)
         
@@ -143,7 +144,8 @@ async def handle_private_game_create_with_friends(update: Update, context) -> No
                     game_id=game.id,
                     user_id=db_user.id,
                     is_bot=False,
-                    join_order=join_order
+                    join_order=join_order,
+                    is_confirmed=False
                 )
                 session.add(friend_player)
                 added_count += 1
@@ -159,6 +161,30 @@ async def handle_private_game_create_with_friends(update: Update, context) -> No
     # Clear selected friends from context
     context.user_data.pop('selected_friends', None)
     
+    # Send invite requests to selected friends (accept/decline required)
+    try:
+        creator_name = user.first_name or user.username or "Друг"
+        invite_keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Принять", callback_data=f"private:invite_accept:{game_id}"),
+                InlineKeyboardButton("❌ Отказаться", callback_data=f"private:invite_decline:{game_id}")
+            ]
+        ])
+        for friend_telegram_id in selected_friend_ids:
+            try:
+                await context.bot.send_message(
+                    chat_id=friend_telegram_id,
+                    text=(
+                        f"👋 {creator_name} приглашает вас в приватную игру!\n\n"
+                        f"Нажмите «Принять», чтобы подтвердить участие."
+                    ),
+                    reply_markup=invite_keyboard
+                )
+            except Exception as e:
+                logger.error(f"Failed to send private game invite to {friend_telegram_id}: {e}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Failed to send private game invites for game {game_id}: {e}", exc_info=True)
+
     # Ask for bot difficulty (use game_id instead of game.id to avoid detached instance error)
     keyboard = [
         [
@@ -170,7 +196,8 @@ async def handle_private_game_create_with_friends(update: Update, context) -> No
     
     await query.edit_message_text(
         f"✅ Игра создана!\n\n"
-        f"👥 Добавлено друзей: {added_count}\n\n"
+        f"👥 Добавлено друзей: {added_count}\n"
+        f"✅ Для старта требуется подтверждение от всех приглашённых\n\n"
         f"🤖 Выберите сложность ботов для заполнения оставшихся мест:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -313,53 +340,7 @@ async def handle_private_game_users_selected(update: Update, context, user_share
         reply_markup=inline_keyboard
     )
     
-    # Send notification to selected friend
-    if selected_user_id:
-        try:
-            creator_name = user.first_name or user.username or "Друг"
-            logger.info(f"Attempting to send invitation to user {selected_user_id} (type: {type(selected_user_id)}) from creator {user_id} ({creator_name})")
-            logger.info(f"context.bot type: {type(context.bot)}")
-            logger.info(f"context.bot.bot type: {type(context.bot.bot) if hasattr(context.bot, 'bot') else 'N/A'}")
-            
-            # Validate selected_user_id is an integer
-            if not isinstance(selected_user_id, int):
-                logger.error(f"selected_user_id is not an integer: {selected_user_id} (type: {type(selected_user_id)})")
-                await update.message.reply_text("❌ Ошибка: неверный ID пользователя")
-                return
-            
-            # Use context.bot instead of creating a new Bot instance
-            logger.info(f"Calling context.bot.send_message(chat_id={selected_user_id}, text=...)")
-            result = await context.bot.send_message(
-                chat_id=selected_user_id,
-                text=f"👋 {creator_name} пригласил вас в приватную игру!\n\n"
-                     f"Игра будет создана после того, как создатель выберет всех друзей и начнёт игру."
-            )
-            logger.info(f"Successfully sent invitation notification to user {selected_user_id}. Message ID: {result.message_id}")
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Failed to send notification to user {selected_user_id}: {error_msg}", exc_info=True)
-            
-            # Check for specific Telegram API errors
-            if "Forbidden" in error_msg or "bot was blocked" in error_msg.lower():
-                logger.warning(f"User {selected_user_id} has blocked the bot or not started a conversation")
-                await update.message.reply_text(
-                    f"⚠️ Не удалось отправить приглашение пользователю.\n"
-                    f"Возможно, он не начал диалог с ботом или заблокировал бота."
-                )
-            elif "chat not found" in error_msg.lower():
-                logger.warning(f"Chat with user {selected_user_id} not found")
-                await update.message.reply_text(
-                    f"⚠️ Не удалось найти пользователя для отправки приглашения."
-                )
-            else:
-                # Log the full exception details for other errors
-                import traceback
-                logger.error(f"Full traceback: {traceback.format_exc()}")
-                await update.message.reply_text(
-                    f"⚠️ Произошла ошибка при отправке приглашения. Друг всё равно добавлен в список."
-                )
-    else:
-        logger.error(f"Cannot send notification: selected_user_id is None or invalid")
+    # Note: invite messages are sent after game creation with accept/decline buttons.
         
 
 
@@ -468,7 +449,12 @@ async def handle_private_game_invite(update: Update, context, game_id: int) -> N
         ).first()
         
         if existing_player:
-            await update.message.reply_text("✅ Вы уже в этой игре!")
+            if not existing_player.is_confirmed:
+                existing_player.is_confirmed = True
+                session.commit()
+                await update.message.reply_text("✅ Вы подтвердили участие в игре!")
+            else:
+                await update.message.reply_text("✅ Вы уже в этой игре!")
             return
         
         # Check if game is full
@@ -480,12 +466,13 @@ async def handle_private_game_invite(update: Update, context, game_id: int) -> N
             await update.message.reply_text("❌ Игра уже заполнена (10/10)")
             return
         
-        # Add player
+        # Add player (confirmed by joining via invite link)
         game_player = GamePlayer(
             game_id=game_id,
             user_id=db_user.id,
             is_bot=False,
-            join_order=players_count + 1
+            join_order=players_count + 1,
+            is_confirmed=True
         )
         session.add(game_player)
         session.commit()
@@ -523,6 +510,19 @@ async def handle_private_game_start(update: Update, context, game_id: int) -> No
             await query.answer("Игра уже началась", show_alert=True)
             return
         
+        # Ensure all invited players confirmed
+        pending_count = session.query(GamePlayer).filter(
+            GamePlayer.game_id == game_id,
+            GamePlayer.is_bot == False,
+            GamePlayer.is_confirmed == False
+        ).count()
+        if pending_count > 0:
+            await query.answer(
+                f"Ожидаем подтверждения от {pending_count} игрок(ов)",
+                show_alert=True
+            )
+            return
+
         # Get current players
         players = GameQueries.get_game_players(session, game_id)
         players_count = len(players)
@@ -614,6 +614,61 @@ async def handle_private_game_cancel(update: Update, context, game_id: int) -> N
     await query.edit_message_text("❌ Игра отменена")
 
 
+async def handle_private_game_invite_response(update: Update, context, game_id: int, accepted: bool) -> None:
+    """Handle accept/decline for private game invite."""
+    query = update.callback_query
+    user = update.effective_user
+    user_id = user.id
+
+    with db_session() as session:
+        db_user = UserQueries.get_user_by_telegram_id(session, user_id)
+        if not db_user:
+            await query.answer("Ошибка: пользователь не найден", show_alert=True)
+            return
+
+        game = GameQueries.get_game_by_id(session, game_id)
+        if not game:
+            await query.answer("Ошибка: игра не найдена", show_alert=True)
+            return
+
+        if game.game_type != 'private' or game.status != 'waiting':
+            await query.answer("Игра уже началась или отменена", show_alert=True)
+            return
+
+        game_player = session.query(GamePlayer).filter(
+            GamePlayer.game_id == game_id,
+            GamePlayer.user_id == db_user.id
+        ).first()
+
+        if not game_player:
+            await query.answer("Вы не приглашены в эту игру", show_alert=True)
+            return
+
+        if accepted:
+            game_player.is_confirmed = True
+            session.commit()
+            await query.answer("Вы подтвердили участие", show_alert=False)
+            await query.edit_message_text("✅ Вы подтвердили участие в приватной игре.")
+        else:
+            # Decline: remove player from game
+            session.delete(game_player)
+            session.commit()
+            await query.answer("Вы отказались", show_alert=False)
+            await query.edit_message_text("❌ Вы отказались от участия в приватной игре.")
+
+        # Notify creator
+        creator = session.query(User).filter(User.id == game.creator_id).first()
+        if creator and creator.telegram_id:
+            try:
+                status_text = "принял(а)" if accepted else "отказался(ась)"
+                await context.bot.send_message(
+                    chat_id=creator.telegram_id,
+                    text=f"👤 Пользователь {db_user.full_name or db_user.username or db_user.id} {status_text} приглашение в игру #{game_id}."
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify creator about invite response: {e}", exc_info=True)
+
+
 async def handle_private_game_callback(update: Update, context, data: str) -> None:
     """Route private game callbacks to appropriate handlers."""
     # Parse callback data: private:action:param
@@ -656,6 +711,18 @@ async def handle_private_game_callback(update: Update, context, data: str) -> No
         else:
             # Legacy format: private:difficulty:difficulty (without game_id)
             await handle_private_game_difficulty(update, context, 0, param)
+    elif action == "invite_accept":
+        try:
+            game_id = int(param)
+            await handle_private_game_invite_response(update, context, game_id, True)
+        except ValueError:
+            logger.error(f"Invalid game_id in callback: {param}")
+    elif action == "invite_decline":
+        try:
+            game_id = int(param)
+            await handle_private_game_invite_response(update, context, game_id, False)
+        except ValueError:
+            logger.error(f"Invalid game_id in callback: {param}")
     elif action == "start":
         # Handle start game
         try:

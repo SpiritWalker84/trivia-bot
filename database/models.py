@@ -191,6 +191,7 @@ class GamePlayer(Base, TimestampMixin):
     final_place = Column(Integer, nullable=True)
     is_spectator = Column(Boolean, nullable=True, default=None)  # None = not eliminated, True = spectator, False = left game
     left_game = Column(Boolean, nullable=False, default=False)  # True if player chose to leave
+    is_confirmed = Column(Boolean, nullable=False, default=True)  # Private game invite accepted
     
     # Relationships
     game = relationship("Game", back_populates="players")
