@@ -4,10 +4,12 @@ Run once on server.
 """
 import os
 import sys
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 
 def main() -> None:
+    load_dotenv()
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         print("DATABASE_URL is not set.")
