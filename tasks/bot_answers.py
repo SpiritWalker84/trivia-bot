@@ -171,44 +171,65 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         round_id: Round ID
         current_question_number: Current question number
     """
-    from database.models import RoundQuestion
-    from tasks.question_sender import send_question_to_players
+    from database.models import RoundQuestion, Round, Game
     
     with db_session() as session:
-        # Check if there are more questions
-        next_question_number = current_question_number + 1
+        # Verify game and round are still active
+        game = session.query(Game).filter(Game.id == game_id).first()
+        if not game or game.status != 'in_progress':
+            logger.warning(f"Game {game_id} is not in_progress, skipping next question")
+            return
         
+        round_obj = session.query(Round).filter(Round.id == round_id).first()
+        if not round_obj or round_obj.status != 'in_progress':
+            logger.warning(f"Round {round_id} is not in_progress, skipping next question")
+            return
+        
+        # Verify current question exists and is correct
+        current_question = session.query(RoundQuestion).filter(
+            RoundQuestion.round_id == round_id,
+            RoundQuestion.question_number == current_question_number
+        ).first()
+        
+        if not current_question:
+            logger.error(f"Current question {current_question_number} not found in round {round_id}")
+            return
+        
+        # Check if next question was already sent (protection against duplicate calls)
+        next_question_number = current_question_number + 1
         next_question = session.query(RoundQuestion).filter(
             RoundQuestion.round_id == round_id,
             RoundQuestion.question_number == next_question_number
         ).first()
         
-        if next_question:
-            # Send next question with a short delay (1-2 seconds)
-            # This ensures all processing is complete but keeps the game pace fast
-            delay = 2  # 2 seconds delay between questions
-            logger.info(f"Scheduling next question {next_question_number} with {delay}s delay after question {current_question_number}")
-            send_question_to_players.apply_async(
-                args=[game_id, round_id, next_question.id],
-                countdown=delay
-            )
-            
-            # Process bot answers for next question (with additional delay)
-            from tasks.bot_answers import process_bot_answers
-            process_bot_answers.apply_async(
-                args=[game_id, round_id, next_question.id],
-                countdown=4  # Delay to let question be sent first
-            )
-        else:
+        if not next_question:
             # Last question in round - finish round
             from tasks.game_tasks import finish_round_task
-            from database.models import Round
-            round_obj = session.query(Round).filter(Round.id == round_id).first()
-            if round_obj:
-                logger.info(f"Last question ({current_question_number}) answered in round {round_obj.round_number} for game {game_id}, scheduling finish_round_task")
-                finish_round_task.apply_async(
-                    args=[game_id, round_obj.round_number],
-                    countdown=2  # Small delay to ensure all answers are processed
-                )
-            else:
-                logger.error(f"Round {round_id} not found when trying to finish round")
+            logger.info(f"Last question ({current_question_number}) answered in round {round_obj.round_number} for game {game_id}, scheduling finish_round_task")
+            finish_round_task.apply_async(
+                args=[game_id, round_obj.round_number],
+                countdown=2  # Small delay to ensure all answers are processed
+            )
+            return
+        
+        # Check if next question was already displayed (protection against duplicate sends)
+        if next_question.displayed_at:
+            logger.warning(f"Question {next_question_number} was already sent (displayed_at: {next_question.displayed_at}), skipping duplicate send")
+            return
+        
+        # Send next question with a short delay (1-2 seconds)
+        # This ensures all processing is complete but keeps the game pace fast
+        delay = 2  # 2 seconds delay between questions
+        logger.info(f"Scheduling next question {next_question_number} with {delay}s delay after question {current_question_number}")
+        
+        from tasks.question_sender import send_question_to_players
+        send_question_to_players.apply_async(
+            args=[game_id, round_id, next_question.id],
+            countdown=delay
+        )
+        
+        # Process bot answers for next question (with additional delay)
+        process_bot_answers.apply_async(
+            args=[game_id, round_id, next_question.id],
+            countdown=4  # Delay to let question be sent first
+        )
