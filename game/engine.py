@@ -4,6 +4,7 @@ Game engine - core game logic and state management.
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 import pytz
+import random
 from database.models import Game, GamePlayer, Round, RoundQuestion, Answer, Question, User
 from database.session import db_session
 from database.queries import RoundQueries, QuestionQueries
@@ -53,6 +54,58 @@ class GameEngine:
             session.commit()
             return True
     
+    def _shuffle_question_options(self, question: Question) -> tuple[Dict[str, str], str]:
+        """
+        Shuffle answer options for a question.
+        
+        Args:
+            question: Question object with options A, B, C, D
+            
+        Returns:
+            Tuple of (shuffled_mapping, correct_option_shuffled):
+            - shuffled_mapping: Dict mapping new positions to original positions
+                               e.g., {"A": "C", "B": "A", "C": "B", "D": "D"}
+                               This means: new position A shows original option C
+            - correct_option_shuffled: The correct option letter after shuffling
+        """
+        # Collect available options with their original positions
+        original_options = []
+        available_letters = []
+        
+        if question.option_a:
+            original_options.append(('A', question.option_a))
+            available_letters.append('A')
+        if question.option_b:
+            original_options.append(('B', question.option_b))
+            available_letters.append('B')
+        if question.option_c:
+            original_options.append(('C', question.option_c))
+            available_letters.append('C')
+        if question.option_d:
+            original_options.append(('D', question.option_d))
+            available_letters.append('D')
+        
+        # Shuffle the list of options
+        shuffled_options = original_options.copy()
+        random.shuffle(shuffled_options)
+        
+        # Create mapping: new_position -> original_position
+        # This tells us which original option text to show at each new position
+        shuffled_mapping = {}
+        for i, (original_letter, _) in enumerate(shuffled_options):
+            new_letter = available_letters[i]
+            shuffled_mapping[new_letter] = original_letter
+        
+        # Find where the correct option ended up
+        correct_original = question.correct_option.upper()
+        # Find which new position contains the correct original option
+        correct_option_shuffled = next(
+            (new_letter for new_letter, orig_letter in shuffled_mapping.items() if orig_letter == correct_original),
+            correct_original
+        )
+        
+        return shuffled_mapping, correct_option_shuffled
+    
     def _create_round(
         self,
         session,
@@ -97,11 +150,16 @@ class GameEngine:
         # Create round questions (use available questions, even if less than needed)
         questions_to_use = questions[:min(len(questions), self.config.QUESTIONS_PER_ROUND)]
         for i, question in enumerate(questions_to_use, 1):
+            # Shuffle answer options for this question
+            shuffled_mapping, correct_option_shuffled = self._shuffle_question_options(question)
+            
             round_question = RoundQuestion(
                 round_id=round_obj.id,
                 question_id=question.id,
                 question_number=i,
-                time_limit_sec=self.config.QUESTION_TIME_LIMIT
+                time_limit_sec=self.config.QUESTION_TIME_LIMIT,
+                shuffled_options=shuffled_mapping,
+                correct_option_shuffled=correct_option_shuffled
             )
             session.add(round_question)
             

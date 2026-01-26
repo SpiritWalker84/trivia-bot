@@ -93,8 +93,13 @@ async def handle_answer(
         # Convert to Decimal for database compatibility
         answer_time_decimal = Decimal(str(answer_time))
         
-        # Check if answer is correct
-        is_correct = (selected_option.upper() == question.correct_option.upper())
+        # Check if answer is correct (use shuffled correct option if available)
+        if round_question.correct_option_shuffled:
+            correct_option = round_question.correct_option_shuffled
+        else:
+            # Fallback to original correct option (backward compatibility)
+            correct_option = question.correct_option
+        is_correct = (selected_option.upper() == correct_option.upper())
         
         # Get game and game_player
         game = session.query(Game).filter(Game.id == round_obj.game_id).first()
@@ -139,7 +144,9 @@ async def handle_answer(
             if is_correct:
                 await query.message.reply_text(f"✅ Правильно! (вы ответили за {time_str} сек)")
             else:
-                await query.message.reply_text(f"❌ Неправильно. Правильный ответ: {question.correct_option} (вы ответили за {time_str} сек)")
+                # Use shuffled correct option if available
+                correct_option_display = correct_option if round_question.correct_option_shuffled else question.correct_option
+                await query.message.reply_text(f"❌ Неправильно. Правильный ответ: {correct_option_display} (вы ответили за {time_str} сек)")
         except Exception as e:
             logger.error(f"Failed to send answer feedback: {e}")
         

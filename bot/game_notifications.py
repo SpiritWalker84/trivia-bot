@@ -58,16 +58,34 @@ class GameNotifications:
                 f"❓ {question.question_text}\n\n"
             )
             
-            # Build options (only for keyboard, not in text)
+            # Build options using shuffled mapping if available
             options = {}
-            if question.option_a:
-                options['A'] = question.option_a
-            if question.option_b:
-                options['B'] = question.option_b
-            if question.option_c:
-                options['C'] = question.option_c
-            if question.option_d:
-                options['D'] = question.option_d
+            if round_question.shuffled_options:
+                # Use shuffled options
+                shuffled_mapping = round_question.shuffled_options
+                # shuffled_mapping maps new_position -> original_position
+                # So we need to get the original option text for each new position
+                for new_pos in ['A', 'B', 'C', 'D']:
+                    if new_pos in shuffled_mapping:
+                        original_pos = shuffled_mapping[new_pos]
+                        if original_pos == 'A' and question.option_a:
+                            options[new_pos] = question.option_a
+                        elif original_pos == 'B' and question.option_b:
+                            options[new_pos] = question.option_b
+                        elif original_pos == 'C' and question.option_c:
+                            options[new_pos] = question.option_c
+                        elif original_pos == 'D' and question.option_d:
+                            options[new_pos] = question.option_d
+            else:
+                # Fallback to original options if no shuffling (backward compatibility)
+                if question.option_a:
+                    options['A'] = question.option_a
+                if question.option_b:
+                    options['B'] = question.option_b
+                if question.option_c:
+                    options['C'] = question.option_c
+                if question.option_d:
+                    options['D'] = question.option_d
             
             # Visual progress bar for timer
             time_limit = self.config.QUESTION_TIME_LIMIT
@@ -191,15 +209,33 @@ class GameNotifications:
                 f"❓ {question.question_text}\n\n"
             )
             
-            # Add options text (for viewing only)
-            if question.option_a:
-                question_text += f"A) {question.option_a}\n"
-            if question.option_b:
-                question_text += f"B) {question.option_b}\n"
-            if question.option_c:
-                question_text += f"C) {question.option_c}\n"
-            if question.option_d:
-                question_text += f"D) {question.option_d}\n"
+            # Add options text (for viewing only) - use shuffled options if available
+            if round_question.shuffled_options:
+                shuffled_mapping = round_question.shuffled_options
+                for new_pos in ['A', 'B', 'C', 'D']:
+                    if new_pos in shuffled_mapping:
+                        original_pos = shuffled_mapping[new_pos]
+                        option_text = None
+                        if original_pos == 'A' and question.option_a:
+                            option_text = question.option_a
+                        elif original_pos == 'B' and question.option_b:
+                            option_text = question.option_b
+                        elif original_pos == 'C' and question.option_c:
+                            option_text = question.option_c
+                        elif original_pos == 'D' and question.option_d:
+                            option_text = question.option_d
+                        if option_text:
+                            question_text += f"{new_pos}) {option_text}\n"
+            else:
+                # Fallback to original options
+                if question.option_a:
+                    question_text += f"A) {question.option_a}\n"
+                if question.option_b:
+                    question_text += f"B) {question.option_b}\n"
+                if question.option_c:
+                    question_text += f"C) {question.option_c}\n"
+                if question.option_d:
+                    question_text += f"D) {question.option_d}\n"
             
             question_text += "\n👁️ Вы наблюдаете за игрой"
             

@@ -19,7 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 import pytz
 
 
@@ -254,6 +254,8 @@ class RoundQuestion(Base):
     question_number = Column(Integer, nullable=False)
     displayed_at = Column(DateTime(timezone=True), nullable=True)
     time_limit_sec = Column(Integer, nullable=False, default=20)
+    shuffled_options = Column(JSONB, nullable=True)  # Mapping of original options to shuffled positions: {"A": "C", "B": "A", "C": "B", "D": "D"}
+    correct_option_shuffled = Column(CHAR(1), nullable=True)  # Correct option after shuffling ('A', 'B', 'C', 'D')
     
     # Relationships
     round = relationship("Round", back_populates="questions")
