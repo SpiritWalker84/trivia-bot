@@ -105,6 +105,25 @@ def update_question_timer(
             f"❓ {question.question_text}\n\n"
         )
         
+        # Add leaderboard if available (only if not first question)
+        if rq.question_number > 1:
+            try:
+                from bot.round_leaderboard import get_round_leaderboard
+                from database.models import User
+                db_user = session.query(User).filter(User.telegram_id == user_id).first()
+                current_user_id = db_user.id if db_user else None
+                
+                leaderboard_text, _ = get_round_leaderboard(
+                    round_obj.game_id if round_obj else None,
+                    round_id,
+                    current_user_id
+                )
+                if leaderboard_text:
+                    question_text += f"{leaderboard_text}\n\n"
+            except Exception as e:
+                logger.warning(f"Failed to add leaderboard to timer update: {e}")
+                # Continue without leaderboard
+        
         # Visual progress bar
         total_bars = 20
         filled_bars = int((remaining / time_limit) * total_bars) if time_limit > 0 else 0
