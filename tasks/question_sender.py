@@ -81,7 +81,10 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
         )
         logger.info(f"Scheduled collect_answers for question {round_question_id} with delay {delay} seconds")
         
-        logger.info(f"Question {round_question_id} sent to players in game {game_id}")
+        logger.info(
+            f"send_question_to_players: Question {round_question_id} sent to players in game {game_id}, "
+            f"round_id={round_id}, question_number={round_question.question_number if round_question else 'unknown'}"
+        )
         
     except Exception as e:
         logger.error(f"Error sending question {round_question_id}: {e}")
@@ -159,6 +162,11 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
         # Send next question or finish round
         # Add a small delay to ensure all answers are processed and committed
         from tasks.bot_answers import send_next_question
+        logger.info(
+            f"collect_answers: Question {round_question.question_number} finished, "
+            f"scheduling send_next_question for game {game_id}, round {round_id}, "
+            f"current_question_number={round_question.question_number}"
+        )
         send_next_question.apply_async(
             args=[game_id, round_id, round_question.question_number],
             countdown=1  # Small delay to ensure database commit is complete

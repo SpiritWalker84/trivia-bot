@@ -192,6 +192,11 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
     from database.models import RoundQuestion, Round, Game
     from sqlalchemy import func
     
+    logger.info(
+        f"send_next_question CALLED: game_id={game_id}, round_id={round_id}, "
+        f"current_question_number={current_question_number}"
+    )
+    
     with db_session() as session:
         # Verify game and round are still active
         game = session.query(Game).filter(Game.id == game_id).first()
