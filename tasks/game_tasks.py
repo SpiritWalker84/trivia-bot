@@ -79,6 +79,32 @@ def finish_round_task(game_id: int, round_number: int) -> None:
     from database.models import Game, Round
     
     logger.info(f"Finishing round {round_number} for game {game_id}")
+    
+    # Check if game still exists and is active
+    with db_session() as session:
+        game = session.query(Game).filter(Game.id == game_id).first()
+        if not game:
+            logger.warning(f"Game {game_id} not found when trying to finish round {round_number}")
+            return
+        
+        if game.status in ('cancelled', 'finished'):
+            logger.info(f"Game {game_id} is {game.status}, skipping round {round_number} finish")
+            return
+        
+        # Check if round is still relevant
+        round_obj = session.query(Round).filter(
+            Round.game_id == game_id,
+            Round.round_number == round_number
+        ).first()
+        if not round_obj:
+            logger.warning(f"Round {round_number} not found for game {game_id}")
+            return
+        
+        # Check if game has moved to a different round
+        if game.current_round and game.current_round > round_number:
+            logger.info(f"Game {game_id} has moved to round {game.current_round}, skipping old round {round_number} finish")
+            return
+    
     game_engine = GameEngine()
     eliminated_user_id = game_engine.finish_round(game_id, round_number)
     logger.info(f"Round {round_number} finished, eliminated_user_id={eliminated_user_id}")
@@ -100,6 +126,10 @@ def finish_round_task(game_id: int, round_number: int) -> None:
         if not game:
             logger.error(f"Game {game_id} not found after finishing round {round_number}")
             return
+        
+        # Update game current_round
+        game.current_round = round_number
+        session.commit()
         
         alive_count = len([gp for gp in game.players if not gp.is_eliminated])
         logger.info(f"Game {game_id} after round {round_number}: {alive_count} players alive, ROUNDS_PER_GAME={config.config.ROUNDS_PER_GAME}")
