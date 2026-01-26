@@ -197,99 +197,126 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
         f"current_question_number={current_question_number}"
     )
     
-    with db_session() as session:
-        # Verify game and round are still active
-        game = session.query(Game).filter(Game.id == game_id).first()
-        if not game or game.status != 'in_progress':
-            logger.warning(f"Game {game_id} is not in_progress, skipping next question")
-            return
-        
-        round_obj = session.query(Round).filter(Round.id == round_id).first()
-        if not round_obj or round_obj.status != 'in_progress':
-            logger.warning(f"Round {round_id} is not in_progress, skipping next question")
-            return
-        
-        # Verify current question exists and is correct
-        current_question = session.query(RoundQuestion).filter(
-            RoundQuestion.round_id == round_id,
-            RoundQuestion.question_number == current_question_number
-        ).first()
-        
-        if not current_question:
-            logger.error(f"Current question {current_question_number} not found in round {round_id}")
-            return
-        
-        # Find the last question that was actually displayed (to prevent skipping)
-        # Check ALL displayed questions to ensure we're sending in sequence
-        last_displayed_question = session.query(RoundQuestion).filter(
-            RoundQuestion.round_id == round_id,
-            RoundQuestion.displayed_at.isnot(None)
-        ).order_by(RoundQuestion.question_number.desc()).first()
-        
-        if last_displayed_question:
-            last_displayed_number = last_displayed_question.question_number
-            next_question_number = current_question_number + 1
-            
-            # CRITICAL: Only send if next question is the immediate next one
-            # If any question after current was already displayed, something is wrong
-            if last_displayed_number > current_question_number:
-                # Some future question was already displayed - this shouldn't happen
-                # Only allow if it's exactly the next question
-                if next_question_number != last_displayed_number:
-                    logger.error(
-                        f"SEQUENCE ERROR: Current question is {current_question_number}, "
-                        f"next should be {next_question_number}, but question {last_displayed_number} "
-                        f"was already displayed. Skipping to prevent out-of-order sends."
-                    )
-                    return
-                # If next_question_number == last_displayed_number, it means next question was already sent
-                # This is a duplicate call, skip it
-                logger.warning(
-                    f"Question {next_question_number} was already displayed. "
-                    f"This is a duplicate call, skipping."
+    try:
+        with db_session() as session:
+            # CRITICAL: Lock the round to prevent parallel execution
+            # This ensures only one send_next_question task can run at a time for this round
+            # If another task already has the lock, this will raise OperationalError
+            from sqlalchemy.exc import OperationalError
+            try:
+                round_obj = session.query(Round).filter(
+                    Round.id == round_id
+                ).with_for_update(nowait=True).first()
+            except OperationalError as e:
+                # Another task is already processing this round - skip this one
+                logger.info(
+                    f"Round {round_id} is locked by another task (likely processing question {current_question_number + 1}). "
+                    f"Skipping this duplicate call."
                 )
                 return
-        
-        # Check if next question was already sent (protection against duplicate calls)
-        next_question_number = current_question_number + 1
-        next_question = session.query(RoundQuestion).filter(
-            RoundQuestion.round_id == round_id,
-            RoundQuestion.question_number == next_question_number
-        ).first()
-        
-        if not next_question:
-            # Last question in round - finish round
-            from tasks.game_tasks import finish_round_task
-            logger.info(f"Last question ({current_question_number}) answered in round {round_obj.round_number} for game {game_id}, scheduling finish_round_task")
-            finish_round_task.apply_async(
-                args=[game_id, round_obj.round_number],
-                countdown=2  # Small delay to ensure all answers are processed
+            
+            if not round_obj:
+                logger.warning(f"Round {round_id} not found, skipping next question")
+                return
+            
+            if round_obj.status != 'in_progress':
+                logger.warning(f"Round {round_id} is not in_progress (status: {round_obj.status}), skipping next question")
+                return
+            
+            # Verify game is still active (without lock, just check)
+            game = session.query(Game).filter(Game.id == game_id).first()
+            if not game or game.status != 'in_progress':
+                logger.warning(f"Game {game_id} is not in_progress, skipping next question")
+                return
+            
+            # Verify current question exists and is correct
+            current_question = session.query(RoundQuestion).filter(
+                RoundQuestion.round_id == round_id,
+                RoundQuestion.question_number == current_question_number
+            ).first()
+            
+            if not current_question:
+                logger.error(f"Current question {current_question_number} not found in round {round_id}")
+                return
+            
+            # Calculate next question number
+            next_question_number = current_question_number + 1
+            
+            # Find the last question that was actually displayed (to prevent skipping)
+            # This check is critical to prevent out-of-order question sending
+            last_displayed_question = session.query(RoundQuestion).filter(
+                RoundQuestion.round_id == round_id,
+                RoundQuestion.displayed_at.isnot(None)
+            ).order_by(RoundQuestion.question_number.desc()).first()
+            
+            if last_displayed_question:
+                last_displayed_number = last_displayed_question.question_number
+                
+                # CRITICAL CHECK: Ensure we're sending questions in strict sequence
+                # If any question after current was already displayed, we have a problem
+                if last_displayed_number >= next_question_number:
+                    # Next question (or later) was already displayed - this is a duplicate/out-of-order call
+                    logger.warning(
+                        f"DUPLICATE/OUT-OF-ORDER: Current question is {current_question_number}, "
+                        f"next should be {next_question_number}, but question {last_displayed_number} "
+                        f"was already displayed. This task is obsolete, skipping."
+                    )
+                    return
+                
+                # Additional safety: if last displayed is not current, something is wrong
+                if last_displayed_number != current_question_number:
+                    logger.warning(
+                        f"SEQUENCE MISMATCH: Current question is {current_question_number}, "
+                        f"but last displayed is {last_displayed_number}. "
+                        f"This task may be for an old question, skipping."
+                    )
+                    return
+            
+            # Get next question
+            next_question = session.query(RoundQuestion).filter(
+                RoundQuestion.round_id == round_id,
+                RoundQuestion.question_number == next_question_number
+            ).first()
+            
+            if not next_question:
+                # Last question in round - finish round
+                from tasks.game_tasks import finish_round_task
+                logger.info(f"Last question ({current_question_number}) answered in round {round_obj.round_number} for game {game_id}, scheduling finish_round_task")
+                finish_round_task.apply_async(
+                    args=[game_id, round_obj.round_number],
+                    countdown=2  # Small delay to ensure all answers are processed
+                )
+                return
+            
+            # Final check: verify next question hasn't been displayed yet
+            # Refresh from database to get latest state (important for race conditions)
+            session.refresh(next_question)
+            if next_question.displayed_at:
+                logger.warning(
+                    f"Question {next_question_number} was already sent "
+                    f"(displayed_at: {next_question.displayed_at}), skipping duplicate send"
+                )
+                return
+            
+            # Send next question with a short delay (1-2 seconds)
+            # This ensures all processing is complete but keeps the game pace fast
+            delay = 2  # 2 seconds delay between questions
+            logger.info(f"Scheduling next question {next_question_number} with {delay}s delay after question {current_question_number}")
+            
+            from tasks.question_sender import send_question_to_players
+            send_question_to_players.apply_async(
+                args=[game_id, round_id, next_question.id],
+                countdown=delay
             )
-            return
-        
-        # Double-check: verify next question hasn't been displayed yet
-        # Refresh from database to get latest state (important for race conditions)
-        session.refresh(next_question)
-        if next_question.displayed_at:
-            logger.warning(
-                f"Question {next_question_number} was already sent "
-                f"(displayed_at: {next_question.displayed_at}), skipping duplicate send"
+            
+            # Process bot answers for next question (with additional delay)
+            process_bot_answers.apply_async(
+                args=[game_id, round_id, next_question.id],
+                countdown=4  # Delay to let question be sent first
             )
-            return
-        
-        # Send next question with a short delay (1-2 seconds)
-        # This ensures all processing is complete but keeps the game pace fast
-        delay = 2  # 2 seconds delay between questions
-        logger.info(f"Scheduling next question {next_question_number} with {delay}s delay after question {current_question_number}")
-        
-        from tasks.question_sender import send_question_to_players
-        send_question_to_players.apply_async(
-            args=[game_id, round_id, next_question.id],
-            countdown=delay
-        )
-        
-        # Process bot answers for next question (with additional delay)
-        process_bot_answers.apply_async(
-            args=[game_id, round_id, next_question.id],
-            countdown=4  # Delay to let question be sent first
-        )
+            
+            # Commit the transaction to release the lock
+            session.commit()
+            
+    except Exception as e:
+        logger.error(f"Error in send_next_question for game {game_id}, round {round_id}, question {current_question_number}: {e}", exc_info=True)
