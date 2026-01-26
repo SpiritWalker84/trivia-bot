@@ -20,11 +20,14 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
     
     This task is called when it's time to send a question to players.
     """
+    logger.info(f"[QUESTION_SENDER] Task started: game_id={game_id}, round_id={round_id}, round_question_id={round_question_id}")
+    
     from telegram import Bot
     from bot.game_notifications import GameNotifications
     
     # Update round status to in_progress if this is the first question
     with db_session() as session:
+        logger.info(f"[QUESTION_SENDER] Inside db_session, querying round {round_id}")
         round_obj = session.query(Round).filter(Round.id == round_id).first()
         if round_obj and round_obj.status == 'not_started':
             round_obj.status = 'in_progress'
