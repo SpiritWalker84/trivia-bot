@@ -88,6 +88,9 @@ def get_round_leaderboard_text(game_id: int, round_id: int, current_user_id: int
             )
         
         return "\n".join(leaderboard_lines)
+    except Exception as e:
+        logger.error(f"Error in get_round_leaderboard_text: {e}", exc_info=True)
+        return ""
 
 
 class GameNotifications:
@@ -147,14 +150,18 @@ class GameNotifications:
                 f"❓ {question.question_text}\n\n"
             )
             
-            # Add leaderboard
-            leaderboard_text = get_round_leaderboard_text(
-                game_id,
-                round_id,
-                current_user_id
-            )
-            if leaderboard_text:
-                question_text += f"\n{leaderboard_text}\n"
+            # Add leaderboard (with error handling to not break question sending)
+            try:
+                leaderboard_text = get_round_leaderboard_text(
+                    game_id,
+                    round_id,
+                    current_user_id
+                )
+                if leaderboard_text:
+                    question_text += f"\n{leaderboard_text}\n"
+            except Exception as e:
+                logger.warning(f"Failed to get leaderboard for question: {e}", exc_info=True)
+                # Continue without leaderboard if there's an error
             
             # Build options using shuffled mapping if available
             options = {}
