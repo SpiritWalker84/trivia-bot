@@ -215,21 +215,33 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
             return
         
         # Find the last question that was actually displayed (to prevent skipping)
-        # Only check questions that are AFTER the current question to avoid false positives
+        # Check ALL displayed questions to ensure we're sending in sequence
         last_displayed_question = session.query(RoundQuestion).filter(
             RoundQuestion.round_id == round_id,
-            RoundQuestion.displayed_at.isnot(None),
-            RoundQuestion.question_number > current_question_number  # Only check future questions
+            RoundQuestion.displayed_at.isnot(None)
         ).order_by(RoundQuestion.question_number.desc()).first()
         
         if last_displayed_question:
             last_displayed_number = last_displayed_question.question_number
             next_question_number = current_question_number + 1
-            # If the next question was already displayed, skip
-            if next_question_number <= last_displayed_number:
+            
+            # CRITICAL: Only send if next question is the immediate next one
+            # If any question after current was already displayed, something is wrong
+            if last_displayed_number > current_question_number:
+                # Some future question was already displayed - this shouldn't happen
+                # Only allow if it's exactly the next question
+                if next_question_number != last_displayed_number:
+                    logger.error(
+                        f"SEQUENCE ERROR: Current question is {current_question_number}, "
+                        f"next should be {next_question_number}, but question {last_displayed_number} "
+                        f"was already displayed. Skipping to prevent out-of-order sends."
+                    )
+                    return
+                # If next_question_number == last_displayed_number, it means next question was already sent
+                # This is a duplicate call, skip it
                 logger.warning(
-                    f"Question {next_question_number} was already displayed "
-                    f"(last displayed: {last_displayed_number}). Skipping."
+                    f"Question {next_question_number} was already displayed. "
+                    f"This is a duplicate call, skipping."
                 )
                 return
         
