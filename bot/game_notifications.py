@@ -33,7 +33,9 @@ class GameNotifications:
         question: Question,
         round_number: int,
         question_number: int,
-        theme_name: Optional[str] = None
+        theme_name: Optional[str] = None,
+        round_id: Optional[int] = None,
+        game_id: Optional[int] = None
     ) -> bool:
         """
         Send question to player in private message.
@@ -51,31 +53,38 @@ class GameNotifications:
         """
         try:
             # Get current user ID and game/round info for leaderboard
+            # Use provided round_id and game_id if available, otherwise query from round_question
             current_user_id = None
-            game_id = None
-            round_id = None
+            resolved_game_id = game_id
+            resolved_round_id = round_id
+            
             try:
                 with db_session() as session:
                     from database.models import User, Round
                     db_user = session.query(User).filter(User.telegram_id == user_id).first()
                     current_user_id = db_user.id if db_user else None
                     
-                    # Re-query round_question to ensure it's attached to session and get fresh round_id
-                    rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question.id).first()
-                    if not rq:
-                        logger.error(f"RoundQuestion {round_question.id} not found in session")
-                        return False
+                    # If round_id/game_id not provided, get from round_question
+                    if not resolved_round_id or not resolved_game_id:
+                        # Re-query round_question to ensure it's attached to session and get fresh round_id
+                        rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question.id).first()
+                        if not rq:
+                            logger.error(f"RoundQuestion {round_question.id} not found in session")
+                            return False
+                        
+                        # Get round to get game_id - use rq.round_id to ensure we have the correct round
+                        round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
+                        if round_obj:
+                            resolved_game_id = round_obj.game_id
+                            resolved_round_id = rq.round_id
+                        else:
+                            logger.warning(f"Round {rq.round_id} not found for round_question {round_question.id}")
+                            return False
                     
-                    # Get round to get game_id - use rq.round_id to ensure we have the correct round
-                    round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
-                    if round_obj:
-                        game_id = round_obj.game_id
-                        round_id = rq.round_id
-                        logger.debug(f"Question {question_number} in round {round_number}: game_id={game_id}, round_id={round_id}")
-                    else:
-                        logger.warning(f"Round {rq.round_id} not found for round_question {round_question.id}")
+                    logger.debug(f"Question {question_number} in round {round_number}: game_id={resolved_game_id}, round_id={resolved_round_id}")
             except Exception as e:
                 logger.warning(f"Failed to get user/round info for leaderboard: {e}", exc_info=True)
+                # Continue without leaderboard if we can't get the info
             
             # Build question text
             theme_text = f" | Тема: {theme_name}" if theme_name else ""
@@ -86,18 +95,18 @@ class GameNotifications:
             )
             
             # Add leaderboard if available (only if not first question, to avoid clutter)
-            if question_number > 1 and game_id and round_id:
+            if question_number > 1 and resolved_game_id and resolved_round_id:
                 try:
                     from bot.round_leaderboard import get_round_leaderboard
                     leaderboard_text, _ = get_round_leaderboard(
-                        game_id,
-                        round_id,
+                        resolved_game_id,
+                        resolved_round_id,
                         current_user_id
                     )
                     if leaderboard_text:
                         question_text += f"{leaderboard_text}\n\n"
                 except Exception as e:
-                    logger.warning(f"Failed to add leaderboard to question: {e}")
+                    logger.warning(f"Failed to add leaderboard to question: {e}", exc_info=True)
                     # Continue without leaderboard if there's an error
             
             # Build options using shuffled mapping if available
@@ -202,10 +211,10 @@ class GameNotifications:
             from utils.logging import get_logger
             timer_logger = get_logger(__name__)
             time_limit = self.config.QUESTION_TIME_LIMIT
-            timer_logger.info(f"Starting timer for question {round_question.id}, user {user_id}, time_limit={time_limit}")
+            timer_logger.info(f"Starting timer for question {round_question.id}, user {user_id}, round_id={timer_round_id}, time_limit={time_limit}")
             start_question_timer.delay(
-                game_id=game_id,
-                round_id=round_id,
+                game_id=timer_game_id,
+                round_id=timer_round_id,
                 round_question_id=round_question.id,
                 user_id=user_id,
                 message_id=message.message_id,
@@ -371,7 +380,9 @@ class GameNotifications:
                     question,
                     round_obj.round_number,
                     round_question.question_number,
-                    theme_name
+                    theme_name,
+                    round_id=round_id,  # Pass explicit round_id to ensure correct round
+                    game_id=game_id     # Pass explicit game_id to ensure correct game
                 )
                 results[user.telegram_id] = success
             
