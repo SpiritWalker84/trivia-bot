@@ -150,11 +150,11 @@ class GameNotifications:
             progress_bar = "▓" * filled_bars
             question_text += f"\n⏱️ {time_limit} сек [{progress_bar}]"
             
-            # Create keyboard
-            keyboard = QuestionAnswerKeyboard.get_keyboard(
-                round_question.id,
-                options
-            )
+                # Create keyboard (use rq.id from the session)
+                keyboard = QuestionAnswerKeyboard.get_keyboard(
+                    rq.id,
+                    options
+                )
             
             # Remove main menu keyboard when sending first question
             from telegram import ReplyKeyboardRemove
