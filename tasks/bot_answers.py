@@ -200,7 +200,10 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
             from database.models import Round
             round_obj = session.query(Round).filter(Round.id == round_id).first()
             if round_obj:
-                logger.info(f"Round {round_obj.round_number} finished, starting elimination")
-                finish_round_task.delay(game_id, round_obj.round_number)
+                logger.info(f"Last question ({current_question_number}) answered in round {round_obj.round_number} for game {game_id}, scheduling finish_round_task")
+                finish_round_task.apply_async(
+                    args=[game_id, round_obj.round_number],
+                    countdown=2  # Small delay to ensure all answers are processed
+                )
             else:
                 logger.error(f"Round {round_id} not found when trying to finish round")
