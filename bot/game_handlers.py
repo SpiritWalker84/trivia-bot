@@ -95,16 +95,18 @@ async def handle_answer(
         
         # Check if answer is correct (use shuffled correct option if available)
         # Only use shuffled option if both shuffled_options and correct_option_shuffled are set
-        if round_question.shuffled_options and round_question.correct_option_shuffled:
+        has_shuffled = bool(round_question.shuffled_options and round_question.correct_option_shuffled)
+        
+        if has_shuffled:
             correct_option = round_question.correct_option_shuffled
-            logger.debug(f"Using shuffled correct option: {correct_option} (original was {question.correct_option})")
-            logger.debug(f"Shuffled mapping: {round_question.shuffled_options}")
+            logger.info(f"Using SHUFFLED correct option: {correct_option} (original was {question.correct_option})")
+            logger.info(f"Shuffled mapping: {round_question.shuffled_options}")
         else:
             # Fallback to original correct option (backward compatibility or no shuffling)
             correct_option = question.correct_option
-            logger.debug(f"Using original correct option: {correct_option} (shuffled_options={bool(round_question.shuffled_options)}, correct_option_shuffled={round_question.correct_option_shuffled})")
+            logger.info(f"Using ORIGINAL correct option: {correct_option} (shuffled_options={bool(round_question.shuffled_options)}, correct_option_shuffled={round_question.correct_option_shuffled})")
         
-        logger.debug(f"Answer check: selected={selected_option.upper()}, correct={correct_option.upper()}")
+        logger.info(f"Answer check: user selected={selected_option.upper()}, correct={correct_option.upper()}, question_id={question.id}, round_question_id={round_question_id}")
         is_correct = (selected_option.upper() == correct_option.upper())
         logger.info(f"Answer is {'CORRECT' if is_correct else 'INCORRECT'}: user selected {selected_option}, correct was {correct_option}")
         

@@ -60,12 +60,14 @@ class GameNotifications:
             
             # Build options using shuffled mapping if available
             options = {}
-            if round_question.shuffled_options:
+            has_shuffled = bool(round_question.shuffled_options)
+            
+            if has_shuffled:
                 # Use shuffled options
                 shuffled_mapping = round_question.shuffled_options
                 # shuffled_mapping maps new_position -> original_position
                 # So we need to get the original option text for each new position
-                logger.debug(f"Building options with shuffled mapping: {shuffled_mapping}")
+                logger.info(f"Building SHUFFLED options with mapping: {shuffled_mapping} for question {question.id}")
                 for new_pos in ['A', 'B', 'C', 'D']:
                     if new_pos in shuffled_mapping:
                         original_pos = shuffled_mapping[new_pos]
@@ -77,9 +79,10 @@ class GameNotifications:
                             options[new_pos] = question.option_c
                         elif original_pos == 'D' and question.option_d:
                             options[new_pos] = question.option_d
-                logger.debug(f"Built options dict: {list(options.keys())}")
+                logger.info(f"Built SHUFFLED options: {list(options.keys())} for round_question {round_question.id}")
             else:
                 # Fallback to original options if no shuffling (backward compatibility)
+                logger.info(f"Building ORIGINAL options (no shuffling) for question {question.id}, round_question {round_question.id}")
                 if question.option_a:
                     options['A'] = question.option_a
                 if question.option_b:
