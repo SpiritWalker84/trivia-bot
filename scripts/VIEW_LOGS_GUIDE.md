@@ -2,9 +2,11 @@
 
 ## Где находятся логи
 
-1. **Основной лог бота**: `logs/trivia_bot.log`
-2. **Лог Celery worker**: `logs/celery_worker.log` (если настроен)
-3. **Лог Celery beat**: `logs/celery_beat.log` (если настроен)
+1. **Основной лог бота**: `logs/trivia_bot.log` - логи основного бота (команды пользователей, обработка сообщений)
+2. **Лог Celery worker**: `logs/celery_worker.log` ⭐ **ВАЖНО: Здесь логи отправки вопросов!**
+   - Все задачи отправки вопросов (`send_question_to_players`, `send_next_question`, `process_bot_answers`)
+   - Все фоновые задачи игры выполняются через Celery worker
+3. **Лог Celery beat**: `logs/celery_beat.log` (если настроен) - логи планировщика задач
 
 ## Быстрый просмотр через скрипт
 
@@ -32,18 +34,23 @@ tail -f logs/trivia_bot.log
 
 ### 2. Поиск ошибок последовательности вопросов
 
+**⚠️ ВАЖНО: Логи отправки вопросов находятся в `logs/celery_worker.log`, а не в `logs/trivia_bot.log`!**
+
 ```bash
-# Поиск SEQUENCE ERROR
-grep -i "SEQUENCE ERROR" logs/trivia_bot.log | tail -n 50
+# Поиск SEQUENCE ERROR (в celery_worker.log)
+grep -i "SEQUENCE ERROR" logs/celery_worker.log | tail -n 50
 
-# Поиск пропущенных вопросов
-grep -i "was already displayed\|skipping.*question\|Question.*was already sent" logs/trivia_bot.log | tail -n 50
+# Поиск пропущенных вопросов (в celery_worker.log)
+grep -i "was already displayed\|skipping.*question\|Question.*was already sent" logs/celery_worker.log | tail -n 50
 
-# Поиск всех вызовов send_next_question
-grep -i "send_next_question\|Scheduling next question" logs/trivia_bot.log | tail -n 100
+# Поиск всех вызовов send_next_question (в celery_worker.log)
+grep -i "send_next_question\|Scheduling next question" logs/celery_worker.log | tail -n 100
 
-# Полный контекст вокруг ошибок последовательности
-grep -B 10 -A 10 -i "SEQUENCE ERROR\|was already displayed.*Skipping" logs/trivia_bot.log | tail -n 200
+# Поиск отправки вопросов (в celery_worker.log)
+grep -i "send_question_to_players\|Question.*sent to players" logs/celery_worker.log | tail -n 100
+
+# Полный контекст вокруг ошибок последовательности (в celery_worker.log)
+grep -B 10 -A 10 -i "SEQUENCE ERROR\|was already displayed.*Skipping" logs/celery_worker.log | tail -n 200
 ```
 
 ### 3. Поиск по конкретной игре
@@ -113,29 +120,46 @@ grep "2026-01-26" logs/trivia_bot.log | tail -n 200
 Если вопросы пропускаются во втором раунде:
 
 ```bash
+# ⚠️ ВАЖНО: Используйте logs/celery_worker.log, а не logs/trivia_bot.log!
+
 # 1. Найти все ошибки последовательности
-grep -i "SEQUENCE ERROR\|was already displayed" logs/trivia_bot.log | tail -n 50
+grep -i "SEQUENCE ERROR\|was already displayed" logs/celery_worker.log | tail -n 50
 
 # 2. Найти все вызовы send_next_question для второго раунда
-grep -i "send_next_question.*round.*2\|Scheduling next question.*round.*2" logs/trivia_bot.log | tail -n 100
+grep -i "send_next_question.*round.*2\|Scheduling next question.*round.*2" logs/celery_worker.log | tail -n 100
 
 # 3. Найти все отправки вопросов для второго раунда
-grep -i "Question.*sent.*round.*2\|send_question_to_players.*round" logs/trivia_bot.log | tail -n 100
+grep -i "Question.*sent.*round.*2\|send_question_to_players.*round" logs/celery_worker.log | tail -n 100
 
 # 4. Полный контекст вокруг проблемного времени (замените время)
-grep -B 20 -A 20 "2026-01-26 18:4[5-7]" logs/trivia_bot.log | grep -i "question\|round\|SEQUENCE\|skipping" | tail -n 200
+grep -B 20 -A 20 "2026-01-26 18:4[5-7]" logs/celery_worker.log | grep -i "question\|round\|SEQUENCE\|skipping" | tail -n 200
+
+# 5. Найти все записи о конкретном вопросе (например, вопрос 4)
+grep -i "question.*4\|question_number.*4" logs/celery_worker.log | tail -n 50
 ```
 
 ## Просмотр логов Celery
 
-Если Celery worker пишет в отдельный файл:
+**⭐ ВАЖНО: Все логи отправки вопросов находятся в `logs/celery_worker.log`!**
 
 ```bash
-# Логи Celery worker
+# Логи Celery worker (живой просмотр)
 tail -f logs/celery_worker.log
+
+# Последние 100 строк
+tail -n 100 logs/celery_worker.log
 
 # Поиск ошибок в Celery
 grep -i error logs/celery_worker.log | tail -n 50
+
+# Поиск всех записей о вопросах
+grep -i "question\|send_next_question\|send_question_to_players" logs/celery_worker.log | tail -n 100
+
+# Поиск по конкретной игре (замените GAME_ID)
+grep "game_id.*GAME_ID\|Game GAME_ID" logs/celery_worker.log | tail -n 100
+
+# Поиск по конкретному раунду (замените ROUND_ID)
+grep "round_id.*ROUND_ID\|Round ROUND_ID" logs/celery_worker.log | tail -n 100
 ```
 
 ## Сохранение логов для анализа
