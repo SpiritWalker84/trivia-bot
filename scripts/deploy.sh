@@ -119,8 +119,15 @@ if grep -q "shuffled_options" "$BOT_ANSWERS_FILE" 2>/dev/null; then
 else
     print_warning "bot_answers.py needs to be updated. Updating now..."
     
-    # Create a Python script to update the file
-    python3 <<EOF
+    # Use the fix script
+    if [ -f "$PROJECT_DIR/scripts/fix_bot_answers.py" ]; then
+        python "$PROJECT_DIR/scripts/fix_bot_answers.py" || {
+            print_error "Failed to update bot_answers.py automatically"
+            print_warning "Please update tasks/bot_answers.py manually (lines 81-96)"
+        }
+    else
+        # Fallback: inline Python script
+        python3 <<EOF
 import re
 
 file_path = "$BOT_ANSWERS_FILE"
