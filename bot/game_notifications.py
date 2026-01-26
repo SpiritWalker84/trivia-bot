@@ -66,6 +66,23 @@ class GameNotifications:
                 game_id = round_obj.game_id if round_obj else None
                 round_id = rq.round_id
             
+            # Get current user ID for leaderboard
+            current_user_id = None
+            game_id = None
+            round_id = None
+            try:
+                with db_session() as session:
+                    from database.models import User, Round
+                    db_user = session.query(User).filter(User.telegram_id == user_id).first()
+                    current_user_id = db_user.id if db_user else None
+                    
+                    # Get round to get game_id
+                    round_obj = session.query(Round).filter(Round.id == round_question.round_id).first()
+                    game_id = round_obj.game_id if round_obj else None
+                    round_id = round_question.round_id
+            except Exception as e:
+                logger.warning(f"Failed to get user/round info for leaderboard: {e}")
+            
             # Build question text
             theme_text = f" | Тема: {theme_name}" if theme_name else ""
             question_text = (
@@ -73,6 +90,21 @@ class GameNotifications:
                 f"Вопрос {question_number}/{self.config.QUESTIONS_PER_ROUND}:\n\n"
                 f"❓ {question.question_text}\n\n"
             )
+            
+            # Add leaderboard if available (only if not first question, to avoid clutter)
+            if question_number > 1 and game_id and round_id:
+                try:
+                    from bot.round_leaderboard import get_round_leaderboard
+                    leaderboard_text, _ = get_round_leaderboard(
+                        game_id,
+                        round_id,
+                        current_user_id
+                    )
+                    if leaderboard_text:
+                        question_text += f"{leaderboard_text}\n\n"
+                except Exception as e:
+                    logger.warning(f"Failed to add leaderboard to question: {e}")
+                    # Continue without leaderboard
             
             # Add leaderboard (with error handling to not break question sending)
             try:
