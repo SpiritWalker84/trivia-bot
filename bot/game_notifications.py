@@ -34,7 +34,8 @@ def get_round_leaderboard_text(game_id: int, round_id: int, current_user_id: int
     if not game_id or not round_id:
         return ""
     
-    with db_session() as session:
+    try:
+        with db_session() as session:
         # Get all alive players
         players = session.query(GamePlayer).filter(
             GamePlayer.game_id == game_id,
