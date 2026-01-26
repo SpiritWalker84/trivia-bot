@@ -122,7 +122,6 @@ class GameNotifications:
         Returns:
             True if sent successfully, False otherwise
         """
-        logger.info(f"[SEND_QUESTION_START] user_id={user_id}, round_question_id={round_question.id}, question_id={question.id}")
         try:
             # Get current user ID and game/round info for leaderboard
             with db_session() as session:
@@ -130,10 +129,15 @@ class GameNotifications:
                 db_user = session.query(User).filter(User.telegram_id == user_id).first()
                 current_user_id = db_user.id if db_user else None
                 
-                # Get round to get game_id
-                round_obj = session.query(Round).filter(Round.id == round_question.round_id).first()
+                # Get round to get game_id (re-query round_question to ensure it's attached)
+                rq = session.query(RoundQuestion).filter(RoundQuestion.id == round_question.id).first()
+                if not rq:
+                    logger.error(f"RoundQuestion {round_question.id} not found in session")
+                    return False
+                
+                round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
                 game_id = round_obj.game_id if round_obj else None
-                round_id = round_question.round_id
+                round_id = rq.round_id
             
             # Build question text
             theme_text = f" | Тема: {theme_name}" if theme_name else ""
