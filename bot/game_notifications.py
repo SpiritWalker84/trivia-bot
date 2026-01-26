@@ -123,29 +123,32 @@ class GameNotifications:
                 if has_shuffled:
                     # Use shuffled options
                     shuffled_mapping = rq.shuffled_options
-                # shuffled_mapping maps new_position -> original_position
-                # So we need to get the original option text for each new position
-                for new_pos in ['A', 'B', 'C', 'D']:
-                    if new_pos in shuffled_mapping:
-                        original_pos = shuffled_mapping[new_pos]
-                        if original_pos == 'A' and question.option_a:
-                            options[new_pos] = question.option_a
-                        elif original_pos == 'B' and question.option_b:
-                            options[new_pos] = question.option_b
-                        elif original_pos == 'C' and question.option_c:
-                            options[new_pos] = question.option_c
-                        elif original_pos == 'D' and question.option_d:
-                            options[new_pos] = question.option_d
-            else:
-                # Fallback to original options if no shuffling (backward compatibility)
-                if question.option_a:
-                    options['A'] = question.option_a
-                if question.option_b:
-                    options['B'] = question.option_b
-                if question.option_c:
-                    options['C'] = question.option_c
-                if question.option_d:
-                    options['D'] = question.option_d
+                    # shuffled_mapping maps new_position -> original_position
+                    # So we need to get the original option text for each new position
+                    for new_pos in ['A', 'B', 'C', 'D']:
+                        if new_pos in shuffled_mapping:
+                            original_pos = shuffled_mapping[new_pos]
+                            if original_pos == 'A' and question.option_a:
+                                options[new_pos] = question.option_a
+                            elif original_pos == 'B' and question.option_b:
+                                options[new_pos] = question.option_b
+                            elif original_pos == 'C' and question.option_c:
+                                options[new_pos] = question.option_c
+                            elif original_pos == 'D' and question.option_d:
+                                options[new_pos] = question.option_d
+                else:
+                    # Fallback to original options if no shuffling (backward compatibility)
+                    if question.option_a:
+                        options['A'] = question.option_a
+                    if question.option_b:
+                        options['B'] = question.option_b
+                    if question.option_c:
+                        options['C'] = question.option_c
+                    if question.option_d:
+                        options['D'] = question.option_d
+                
+                # Store rq.id for later use
+                round_question_id = rq.id
             
             # Visual progress bar for timer
             time_limit = self.config.QUESTION_TIME_LIMIT
