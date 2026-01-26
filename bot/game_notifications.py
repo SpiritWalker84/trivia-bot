@@ -49,6 +49,7 @@ class GameNotifications:
         Returns:
             True if sent successfully, False otherwise
         """
+        logger.info(f"[SEND_QUESTION_START] user_id={user_id}, round_question_id={round_question.id}, question_id={question.id}")
         try:
             # Build question text
             theme_text = f" | Тема: {theme_name}" if theme_name else ""
