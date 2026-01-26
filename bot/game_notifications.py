@@ -341,7 +341,16 @@ class GameNotifications:
                 RoundQuestion.id == round_question_id
             ).first()
             if not round_question:
+                logger.error(
+                    f"send_question_to_all_players: RoundQuestion {round_question_id} not found! "
+                    f"game_id={game_id}, round_id={round_id}"
+                )
                 return {}
+            
+            logger.info(
+                f"send_question_to_all_players: Sending question {round_question_id} "
+                f"(question_number={round_question.question_number}) to players in game {game_id}, round {round_obj.round_number}"
+            )
             
             question = session.query(Question).filter(
                 Question.id == round_question.question_id

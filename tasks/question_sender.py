@@ -20,6 +20,10 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
     
     This task is called when it's time to send a question to players.
     """
+    logger.info(
+        f"send_question_to_players CALLED: game_id={game_id}, round_id={round_id}, round_question_id={round_question_id}"
+    )
+    
     from telegram import Bot
     from bot.game_notifications import GameNotifications
     
@@ -81,10 +85,17 @@ def send_question_to_players(game_id: int, round_id: int, round_question_id: int
         )
         logger.info(f"Scheduled collect_answers for question {round_question_id} with delay {delay} seconds")
         
-        logger.info(
-            f"send_question_to_players: Question {round_question_id} sent to players in game {game_id}, "
-            f"round_id={round_id}, question_number={round_question.question_number if round_question else 'unknown'}"
-        )
+        # Log which question was actually sent
+        if round_question:
+            logger.info(
+                f"send_question_to_players: Question {round_question_id} (question_number={round_question.question_number}) "
+                f"sent to players in game {game_id}, round_id={round_id}"
+            )
+        else:
+            logger.warning(
+                f"send_question_to_players: Question {round_question_id} not found after sending! "
+                f"game_id={game_id}, round_id={round_id}"
+            )
         
     except Exception as e:
         logger.error(f"Error sending question {round_question_id}: {e}")
