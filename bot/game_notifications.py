@@ -104,20 +104,7 @@ class GameNotifications:
                         question_text += f"{leaderboard_text}\n\n"
                 except Exception as e:
                     logger.warning(f"Failed to add leaderboard to question: {e}")
-                    # Continue without leaderboard
-            
-            # Add leaderboard (with error handling to not break question sending)
-            try:
-                leaderboard_text = get_round_leaderboard_text(
-                    game_id,
-                    round_id,
-                    current_user_id
-                )
-                if leaderboard_text:
-                    question_text += f"\n{leaderboard_text}\n"
-            except Exception as e:
-                logger.warning(f"Failed to get leaderboard for question: {e}", exc_info=True)
-                # Continue without leaderboard if there's an error
+                    # Continue without leaderboard if there's an error
             
             # Build options using shuffled mapping if available
             options = {}
