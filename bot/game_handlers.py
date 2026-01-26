@@ -94,13 +94,15 @@ async def handle_answer(
         answer_time_decimal = Decimal(str(answer_time))
         
         # Check if answer is correct (use shuffled correct option if available)
-        if round_question.correct_option_shuffled:
+        # Only use shuffled option if both shuffled_options and correct_option_shuffled are set
+        if round_question.shuffled_options and round_question.correct_option_shuffled:
             correct_option = round_question.correct_option_shuffled
             logger.debug(f"Using shuffled correct option: {correct_option} (original was {question.correct_option})")
+            logger.debug(f"Shuffled mapping: {round_question.shuffled_options}")
         else:
-            # Fallback to original correct option (backward compatibility)
+            # Fallback to original correct option (backward compatibility or no shuffling)
             correct_option = question.correct_option
-            logger.debug(f"Using original correct option: {correct_option}")
+            logger.debug(f"Using original correct option: {correct_option} (shuffled_options={bool(round_question.shuffled_options)}, correct_option_shuffled={round_question.correct_option_shuffled})")
         
         logger.debug(f"Answer check: selected={selected_option.upper()}, correct={correct_option.upper()}")
         is_correct = (selected_option.upper() == correct_option.upper())
