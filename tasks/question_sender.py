@@ -159,6 +159,22 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
         
         session.commit()
         
+        # Check if next question was already scheduled by checking if it's already displayed
+        # This prevents duplicate scheduling when collect_answers is called multiple times
+        next_question_number = round_question.question_number + 1
+        next_question = session.query(RoundQuestion).filter(
+            RoundQuestion.round_id == round_id,
+            RoundQuestion.question_number == next_question_number
+        ).first()
+        
+        if next_question and next_question.displayed_at:
+            # Next question was already sent - don't schedule again
+            logger.info(
+                f"collect_answers: Question {round_question.question_number} finished, "
+                f"but next question {next_question_number} was already sent. Skipping duplicate scheduling."
+            )
+            return
+        
         # Send next question or finish round
         # Add a small delay to ensure all answers are processed and committed
         from tasks.bot_answers import send_next_question

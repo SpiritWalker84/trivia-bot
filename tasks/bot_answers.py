@@ -253,9 +253,8 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
                 last_displayed_number = last_displayed_question.question_number
                 
                 # CRITICAL CHECK: Ensure we're sending questions in strict sequence
-                # If any question after current was already displayed, we have a problem
+                # If next question (or later) was already displayed, this is a duplicate/out-of-order call
                 if last_displayed_number >= next_question_number:
-                    # Next question (or later) was already displayed - this is a duplicate/out-of-order call
                     logger.warning(
                         f"DUPLICATE/OUT-OF-ORDER: Current question is {current_question_number}, "
                         f"next should be {next_question_number}, but question {last_displayed_number} "
@@ -263,14 +262,15 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
                     )
                     return
                 
-                # Additional safety: if last displayed is not current, something is wrong
-                if last_displayed_number != current_question_number:
+                # Safety check: if last displayed is significantly behind current, something is wrong
+                # But allow if last displayed is current (normal case) or one behind (possible timing issue)
+                if last_displayed_number < current_question_number - 1:
                     logger.warning(
-                        f"SEQUENCE MISMATCH: Current question is {current_question_number}, "
-                        f"but last displayed is {last_displayed_number}. "
-                        f"This task may be for an old question, skipping."
+                        f"SEQUENCE GAP: Current question is {current_question_number}, "
+                        f"but last displayed is {last_displayed_number} (gap of {current_question_number - last_displayed_number}). "
+                        f"This may indicate a problem, but continuing anyway."
                     )
-                    return
+                    # Don't return - continue processing, as this might be a timing issue
             
             # Get next question
             next_question = session.query(RoundQuestion).filter(
