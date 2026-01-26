@@ -155,14 +155,56 @@ def check_specific_round_question(round_question_id: int):
                             print(f"  {new_pos}) {orig_text} (was originally {orig_pos}){marker}")
 
 
+def check_question_by_number(question_number: int):
+    """Check question by number in latest game."""
+    with db_session() as session:
+        # Get latest game
+        latest_game = session.query(Game).order_by(Game.id.desc()).first()
+        
+        if not latest_game:
+            print("No games found in database")
+            return
+        
+        # Get rounds for this game
+        rounds = session.query(Round).filter(
+            Round.game_id == latest_game.id
+        ).order_by(Round.round_number).all()
+        
+        if not rounds:
+            print("No rounds found for latest game")
+            return
+        
+        # Find question in first round (assuming question_number is 1-10)
+        for round_obj in rounds:
+            rq = session.query(RoundQuestion).filter(
+                RoundQuestion.round_id == round_obj.id,
+                RoundQuestion.question_number == question_number
+            ).first()
+            
+            if rq:
+                print(f"Found question {question_number} in Round {round_obj.round_number}")
+                print("=" * 80)
+                check_specific_round_question(rq.id)
+                return
+        
+        print(f"Question {question_number} not found in latest game")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        # Check specific round question
-        try:
-            rq_id = int(sys.argv[1])
-            check_specific_round_question(rq_id)
-        except ValueError:
-            print("Invalid round_question_id. Must be a number.")
+        arg = sys.argv[1]
+        
+        # Check if it's a question number (1-10) or round_question_id
+        if arg.isdigit():
+            num = int(arg)
+            if num <= 10:
+                # Probably a question number
+                check_question_by_number(num)
+            else:
+                # Probably a round_question_id
+                check_specific_round_question(num)
+        else:
+            print("Invalid argument. Must be a number (question number 1-10 or round_question_id)")
             sys.exit(1)
     else:
         # Check latest game
