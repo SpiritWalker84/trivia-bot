@@ -185,7 +185,6 @@ class GameNotifications:
                     options['C'] = question.option_c
                 if question.option_d:
                     options['D'] = question.option_d
-                logger.info(f"Built ORIGINAL options dict: A={options.get('A', 'N/A')[:30]}, B={options.get('B', 'N/A')[:30]}, C={options.get('C', 'N/A')[:30]}, D={options.get('D', 'N/A')[:30]}")
             
             # Visual progress bar for timer
             time_limit = self.config.QUESTION_TIME_LIMIT
