@@ -137,9 +137,14 @@ class GameNotifications:
                     logger.warning(f"Failed to remove keyboard for user {user_id}: {e}")
             
             # Send question message
+            import sys
             logger.info(f"[SEND_QUESTION] Sending question to user {user_id}, round_question_id={round_question.id}")
             logger.info(f"[SEND_QUESTION] Final options being sent: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}")
             logger.info(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}")
+            # Also print to stderr to ensure it's visible
+            print(f"[SEND_QUESTION] Sending question to user {user_id}, round_question_id={round_question.id}", file=sys.stderr)
+            print(f"[SEND_QUESTION] Final options: A={options.get('A', 'N/A')[:50]}, B={options.get('B', 'N/A')[:50]}, C={options.get('C', 'N/A')[:50]}, D={options.get('D', 'N/A')[:50]}", file=sys.stderr)
+            print(f"[SEND_QUESTION] Original correct={question.correct_option}, Shuffled correct={round_question.correct_option_shuffled}", file=sys.stderr)
             
             message = await self.bot.send_message(
                 chat_id=user_id,
@@ -148,6 +153,7 @@ class GameNotifications:
             )
             
             logger.info(f"[SEND_QUESTION] Question sent successfully, message_id={message.message_id}")
+            print(f"[SEND_QUESTION] Question sent successfully, message_id={message.message_id}", file=sys.stderr)
             
             # Update displayed_at
             with db_session() as session:
