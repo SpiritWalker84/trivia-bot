@@ -420,13 +420,26 @@ class GameNotifications:
         with db_session() as session:
             game = session.query(Game).filter(Game.id == game_id).first()
             if not game:
+                logger.warning(f"Game {game_id} not found when trying to send round {round_number} results")
                 return
             
+            # Check if game is still active and not cancelled
+            if game.status in ('cancelled', 'finished'):
+                logger.info(f"Game {game_id} is {game.status}, skipping round {round_number} results")
+                return
+            
+            # Check if this round is still relevant (not too old)
             round_obj = session.query(Round).filter(
                 Round.game_id == game_id,
                 Round.round_number == round_number
             ).first()
             if not round_obj:
+                logger.warning(f"Round {round_number} not found for game {game_id}")
+                return
+            
+            # Check if game has moved to a different round (prevent old tasks from sending results)
+            if game.current_round and game.current_round > round_number:
+                logger.info(f"Game {game_id} has moved to round {game.current_round}, skipping old round {round_number} results")
                 return
             
             # Get all players (including eliminated)

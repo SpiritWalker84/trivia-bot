@@ -72,6 +72,10 @@ def get_round_leaderboard(game_id: int, round_id: int, current_user_id: int = No
             leaderboard_lines = ["📊 **Текущие результаты раунда:**\n"]
             
             top_players = player_scores[:10]  # Top 10
+            
+            # Find max name length for alignment (limit to 25 chars for display)
+            max_name_length = min(25, max((len(p['name']) for p in top_players), default=15))
+            
             for i, player in enumerate(top_players, 1):
                 medal = ""
                 if i == 1:
@@ -85,8 +89,15 @@ def get_round_leaderboard(game_id: int, round_id: int, current_user_id: int = No
                 marker = "👤 " if player['user_id'] == current_user_id else ""
                 bot_marker = "🤖 " if player['is_bot'] else ""
                 
+                # Truncate name if too long
+                display_name = player['name']
+                if len(display_name) > max_name_length:
+                    display_name = display_name[:max_name_length-3] + "..."
+                
+                # Format with fixed width for alignment
+                name_padding = max_name_length - len(display_name)
                 leaderboard_lines.append(
-                    f"{medal} {i}. {marker}{bot_marker}{player['name']}: {player['score']} ✅"
+                    f"{medal} {i:2d}. {marker}{bot_marker}{display_name}{' ' * name_padding} {player['score']:2d} ✅"
                 )
             
             # Add current player position if not in top 10
