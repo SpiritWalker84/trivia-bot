@@ -78,20 +78,28 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
             # Create bot AI
             bot_ai = BotAI(difficulty)
             
-            # Generate answer
+            # Get available options (after shuffling)
             options = []
-            if question.option_a:
-                options.append('A')
-            if question.option_b:
-                options.append('B')
-            if question.option_c:
-                options.append('C')
-            if question.option_d:
-                options.append('D')
+            if round_question.shuffled_options:
+                # Use shuffled options - all new positions are available
+                options = list(round_question.shuffled_options.keys())
+                # Use shuffled correct option
+                correct_option = round_question.correct_option_shuffled or question.correct_option
+            else:
+                # Fallback to original options (backward compatibility)
+                if question.option_a:
+                    options.append('A')
+                if question.option_b:
+                    options.append('B')
+                if question.option_c:
+                    options.append('C')
+                if question.option_d:
+                    options.append('D')
+                correct_option = question.correct_option
             
             bot_answer = bot_ai.generate_answer(
                 question.id,
-                question.correct_option,
+                correct_option,
                 options
             )
             
