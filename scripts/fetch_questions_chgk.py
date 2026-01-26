@@ -207,14 +207,15 @@ def import_questions_to_db(questions: List[Dict], chgk_theme_id: int) -> int:
     imported = 0
     
     with db_session() as session:
-        # Получаем или создаем тему
-        theme_info = CHGK_THEME_MAPPING.get(theme_id if isinstance(theme_code, int) else None)
-        if theme_info:
-            theme_code_db, theme_name = theme_info
-        else:
-            theme_code_db = theme_code
-            theme_name = theme_code.capitalize()
+        # Получаем информацию о теме
+        theme_info = CHGK_THEME_MAPPING.get(chgk_theme_id)
+        if not theme_info:
+            logger.error(f"Неизвестный ID темы ЧГК: {chgk_theme_id}")
+            return 0
         
+        theme_code_db, theme_name = theme_info
+        
+        # Получаем или создаем тему
         theme_id = get_or_create_theme(session, theme_code_db, theme_name)
         if not theme_id:
             logger.error(f"Не удалось получить или создать тему '{theme_code_db}'")
