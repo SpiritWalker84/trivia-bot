@@ -448,9 +448,13 @@ class GameNotifications:
                 return
             
             # Check if game has moved to a different round (prevent old tasks from sending results)
-            if game.current_round and game.current_round > round_number:
+            # Only skip if game has moved to a DIFFERENT round (not the same round)
+            # Allow sending results for the current round even if current_round is set
+            if game.current_round and game.current_round != round_number and game.current_round > round_number:
                 logger.info(f"Game {game_id} has moved to round {game.current_round}, skipping old round {round_number} results")
                 return
+            
+            logger.info(f"Sending round {round_number} results for game {game_id} (current_round={game.current_round})")
             
             # Get all players (including eliminated)
             all_players = game.players

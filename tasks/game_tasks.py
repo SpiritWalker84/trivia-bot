@@ -109,16 +109,17 @@ def finish_round_task(game_id: int, round_number: int) -> None:
     eliminated_user_id = game_engine.finish_round(game_id, round_number)
     logger.info(f"Round {round_number} finished, eliminated_user_id={eliminated_user_id}")
     
-    # Send round results
+    # Send round results BEFORE updating current_round to ensure results are sent
     try:
         bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
         notifications = GameNotifications(bot)
+        logger.info(f"Attempting to send round {round_number} results for game {game_id}")
         asyncio.run(notifications.send_round_results(
             game_id, round_number, eliminated_user_id
         ))
-        logger.info(f"Round results sent for game {game_id}, round {round_number}")
+        logger.info(f"Round results sent successfully for game {game_id}, round {round_number}")
     except Exception as e:
-        logger.error(f"Failed to send round results: {e}", exc_info=True)
+        logger.error(f"Failed to send round results for game {game_id}, round {round_number}: {e}", exc_info=True)
     
     # Check if game should continue
     with db_session() as session:
