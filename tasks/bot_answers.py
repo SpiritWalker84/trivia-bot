@@ -71,8 +71,8 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
             # Get bot difficulty - prefer game's difficulty setting over player's stored difficulty
             # This fixes cases where games were created before the fix
             game_difficulty = None
-            if game_ref and game_ref.bot_difficulty:
-                game_difficulty = game_ref.bot_difficulty
+            if game and game.bot_difficulty:
+                game_difficulty = game.bot_difficulty
                 # If player's difficulty doesn't match game's, fix it
                 if game_player.bot_difficulty != game_difficulty:
                     logger.warning(
@@ -96,7 +96,7 @@ def process_bot_answers(game_id: int, round_id: int, round_question_id: int) -> 
             # Log bot difficulty for debugging
             logger.info(
                 f"Bot {game_player.user_id} (player {game_player.id}) using difficulty: {difficulty_str} "
-                f"(accuracy: {bot_ai.accuracy:.1%}, game_difficulty: {game_ref.bot_difficulty if game_ref else None})"
+                f"(accuracy: {bot_ai.accuracy:.1%}, game_difficulty: {game.bot_difficulty if game else None})"
             )
             
             # Get available options (after shuffling)

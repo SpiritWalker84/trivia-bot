@@ -190,22 +190,27 @@ class GameNotifications:
                     session.commit()
             
             # Start countdown timer (update message every second)
-            # Get game_id and round_id from round_question
-            with db_session() as session:
-                rq = session.query(RoundQuestion).filter(
-                    RoundQuestion.id == round_question.id
-                ).first()
-                if not rq:
-                    logger.error(f"RoundQuestion {round_question.id} not found")
-                    return True
-                
-                round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
-                if not round_obj:
-                    logger.error(f"Round {rq.round_id} not found")
-                    return True
-                
-                game_id = round_obj.game_id
-                round_id = round_obj.id
+            # Use resolved_game_id and resolved_round_id if available, otherwise query from round_question
+            timer_game_id = resolved_game_id
+            timer_round_id = resolved_round_id
+            
+            if not timer_game_id or not timer_round_id:
+                # Fallback: get from round_question
+                with db_session() as session:
+                    rq = session.query(RoundQuestion).filter(
+                        RoundQuestion.id == round_question.id
+                    ).first()
+                    if not rq:
+                        logger.error(f"RoundQuestion {round_question.id} not found")
+                        return True
+                    
+                    round_obj = session.query(Round).filter(Round.id == rq.round_id).first()
+                    if not round_obj:
+                        logger.error(f"Round {rq.round_id} not found")
+                        return True
+                    
+                    timer_game_id = round_obj.game_id
+                    timer_round_id = round_obj.id
             
             from tasks.question_timer import start_question_timer
             from utils.logging import get_logger
