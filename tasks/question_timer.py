@@ -139,13 +139,8 @@ def update_question_timer(
         # Add question text AFTER leaderboard (so it's visible on mobile)
         question_text += f"❓ {question.question_text}\n\n"
         
-        # Visual progress bar
-        total_bars = 20
-        filled_bars = int((remaining / time_limit) * total_bars) if time_limit > 0 else 0
-        empty_bars = total_bars - filled_bars
-        progress_bar = "▓" * filled_bars + "░" * empty_bars
-        
-        question_text += f"\n⏱️ {remaining} сек [{progress_bar}]"
+        # Timer text (no progress bar to reduce Telegram load)
+        question_text += f"\n⏱️ {remaining} сек"
         
         # Rebuild keyboard to keep buttons (use shuffled options if available)
         from bot.keyboards import QuestionAnswerKeyboard

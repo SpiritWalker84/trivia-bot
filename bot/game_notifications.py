@@ -154,12 +154,9 @@ class GameNotifications:
                 # Store rq.id for later use
                 round_question_id = rq.id
             
-            # Visual progress bar for timer
+            # Timer text (no progress bar to reduce Telegram load)
             time_limit = self.config.QUESTION_TIME_LIMIT
-            total_bars = 20
-            filled_bars = total_bars  # Start with full bar
-            progress_bar = "▓" * filled_bars
-            question_text += f"\n⏱️ {time_limit} сек [{progress_bar}]"
+            question_text += f"\n⏱️ {time_limit} сек"
             
             # Create keyboard (use round_question_id from the session)
             keyboard = QuestionAnswerKeyboard.get_keyboard(
@@ -636,17 +633,13 @@ class GameNotifications:
                 user = session.query(User).filter(User.id == game_player.user_id).first()
                 if user and user.telegram_id:
                     try:
-                        # Build pause message with initial timer
-                        total_bars = 20
-                        filled_bars = total_bars
-                        progress_bar = "▓" * filled_bars
-                        
+                        # Build pause message with initial timer (no progress bar)
                         pause_text = (
                             f"⏸️ Пауза между раундами\n\n"
                             f"Следующий раунд ({next_round_number}/{self.config.ROUNDS_PER_GAME}) "
                             f"начнется через {time_limit} секунд.\n"
                             f"У вас есть время, чтобы посмотреть результаты.\n\n"
-                            f"⏱️ {time_limit} сек [{progress_bar}]"
+                            f"⏱️ {time_limit} сек"
                         )
                         
                         message = await self.bot.send_message(

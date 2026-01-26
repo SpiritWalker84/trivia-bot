@@ -123,12 +123,8 @@ def update_round_pause_timer(
         f"У вас есть время, чтобы посмотреть результаты.\n\n"
     )
     
-    # Add progress bar
-    total_bars = 20
-    filled_bars = int((remaining / time_limit) * total_bars) if time_limit > 0 else 0
-    empty_bars = total_bars - filled_bars
-    progress_bar = "▓" * filled_bars + "░" * empty_bars
-    pause_text += f"⏱️ {remaining} сек [{progress_bar}]"
+    # Timer text (no progress bar to reduce Telegram load)
+    pause_text += f"⏱️ {remaining} сек"
     
     try:
         logger.debug(f"Updating pause timer: remaining={remaining}, time_limit={time_limit}, user_id={user_id}, message_id={message_id}")
