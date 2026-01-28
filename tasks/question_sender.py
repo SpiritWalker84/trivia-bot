@@ -4,6 +4,8 @@ Question sender task - sends questions to players and handles timers.
 from datetime import datetime, timedelta
 import pytz
 from celery import Task
+import asyncio
+from telegram import Bot
 from database.session import db_session
 from database.models import Game, Round, RoundQuestion
 from tasks.celery_app import celery_app
