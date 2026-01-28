@@ -72,7 +72,7 @@ async def help_command(update: Update, context) -> None:
         "Режимы игры:\n"
         "🏃 Быстрая игра - игра с другими игроками\n"
         "🤖 Тренировка с ботами - игра против ботов\n"
-        "👥 Приватная игра - игра с друзьями"
+        "👥 Играть с друзьями - игра с друзьями"
     )
     await update.message.reply_text(help_text)
 
@@ -109,7 +109,7 @@ async def message_handler(update: Update, context) -> None:
         await handle_quick_game(update, context)
     elif text == "🤖 ТРЕНИРОВКА С БОТАМИ":
         await handle_training(update, context)
-    elif text == "👥 ПРИВАТНАЯ ИГРА":
+    elif text == "👥 Играть с друзьями":
         await handle_private_game(update, context)
     elif text == "📊 РЕЙТИНГ":
         await handle_rating(update, context)

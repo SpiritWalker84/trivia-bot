@@ -14,7 +14,7 @@ class MainMenuKeyboard:
         keyboard = [
             [KeyboardButton("🏃 БЫСТРАЯ ИГРА")],
             [KeyboardButton("🤖 ТРЕНИРОВКА С БОТАМИ")],
-            [KeyboardButton("👥 ПРИВАТНАЯ ИГРА")],
+            [KeyboardButton("👥 Играть с друзьями")],
             [KeyboardButton("📊 РЕЙТИНГ"), KeyboardButton("📖 ПРАВИЛА")],
             [KeyboardButton("📊 Моя статистика")],
         ]
