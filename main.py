@@ -125,31 +125,11 @@ async def message_handler(update: Update, context) -> None:
 
 async def handle_quick_game(update: Update, context) -> None:
     """Handle quick game button."""
-    from database.session import db_session
-    from database.queries import PoolQueries
     from bot.keyboards import MainMenuKeyboard
-    
-    user_id = update.effective_user.id
-    
-    with db_session() as session:
-        # Get or create active pool
-        pool = PoolQueries.get_or_create_active_pool(session)
-        
-        # Add player to pool
-        try:
-            PoolQueries.add_player_to_pool(session, pool.id, user_id)
-        except Exception as e:
-            logger.error(f"Error adding player to pool: {e}")
-            await update.message.reply_text(
-                "Произошла ошибка. Попробуйте позже.",
-                reply_markup=MainMenuKeyboard.get_keyboard()
-            )
-            return
-    
+
     await update.message.reply_text(
-        "✅ Вы добавлены в очередь быстрой игры.\n\n"
-        "Ожидание других игроков...\n"
-        "Каждые 5 минут система проверяет очередь.",
+        "⏳ Функция в разработке.\n\n"
+        "Пока используйте режимы тренировки или игры с друзьями.",
         reply_markup=MainMenuKeyboard.get_keyboard()
     )
 
