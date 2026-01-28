@@ -760,61 +760,69 @@ THEMES_QUESTIONS = {
     },
 }
 
-def generate_questions_for_theme(theme_code: str, theme_data: dict, count: int = 500) -> list:
-    """Генерирует вопросы для темы, дублируя существующие до нужного количества."""
+def generate_questions_for_theme(theme_code: str, theme_data: dict, count: int = None) -> list:
+    """
+    Генерирует уникальные вопросы для темы из базовых вопросов.
+    Варианты ответов НЕ перемешиваются здесь, так как это делается автоматически
+    при создании раунда в game/engine.py.
+    
+    Args:
+        theme_code: Код темы
+        theme_data: Данные темы с базовыми вопросами
+        count: Количество вопросов (игнорируется, используется все доступные базовые вопросы)
+    """
     questions = []
     base_questions = theme_data["questions"]
     
-    # Дублируем вопросы до нужного количества
-    while len(questions) < count:
-        for q_data in base_questions:
-            if len(questions) >= count:
-                break
-            
-            # Создаём варианты ответов
-            options = [q_data["a"]] + q_data["d"]
-            random.shuffle(options)
-            correct_idx = options.index(q_data["a"])
-            correct_option = chr(65 + correct_idx)  # 'A', 'B', 'C', 'D'
-            
-            question = {
-                "theme_code": theme_code,
-                "theme_name": theme_data["name"],
-                "question_text": q_data["q"],
-                "option_a": options[0],
-                "option_b": options[1],
-                "option_c": options[2] if len(options) > 2 else "Нет данных",
-                "option_d": options[3] if len(options) > 3 else "Нет данных",
-                "correct_option": correct_option,
-                "difficulty": "medium",
-                "source_type": "ai"
-            }
-            questions.append(question)
+    # Просто преобразуем базовые вопросы в формат для импорта
+    # Без дублирования - варианты ответов будут перемешаны автоматически при создании раунда
+    for q_data in base_questions:
+        # Создаём варианты ответов в исходном порядке
+        # Правильный ответ всегда A (будет перемешан автоматически в game/engine.py)
+        options = [q_data["a"]] + q_data["d"]
+        
+        question = {
+            "theme_code": theme_code,
+            "theme_name": theme_data["name"],
+            "question_text": q_data["q"],
+            "option_a": options[0] if len(options) > 0 else "Нет данных",
+            "option_b": options[1] if len(options) > 1 else "Нет данных",
+            "option_c": options[2] if len(options) > 2 else "Нет данных",
+            "option_d": options[3] if len(options) > 3 else "Нет данных",
+            "correct_option": "A",  # Правильный ответ всегда A (первый вариант)
+            "difficulty": "medium",
+            "source_type": "manual"  # Изменено с "ai" на "manual", так как вопросы добавлены вручную
+        }
+        questions.append(question)
     
-    return questions[:count]
+    return questions
 
 def main():
     """Генерирует JSON файл с вопросами."""
     all_questions = []
     
     print("Генерация вопросов...")
+    print("Примечание: варианты ответов будут автоматически перемешаны при создании раунда.")
+    print()
     for theme_code, theme_data in THEMES_QUESTIONS.items():
         print(f"  Генерация вопросов для темы: {theme_data['name']} ({theme_code})...")
-        questions = generate_questions_for_theme(theme_code, theme_data, count=500)
+        questions = generate_questions_for_theme(theme_code, theme_data)
         all_questions.extend(questions)
-        print(f"    Сгенерировано {len(questions)} вопросов")
+        print(f"    Сгенерировано {len(questions)} уникальных вопросов")
     
     # Сохраняем в JSON
     output_file = Path("questions_data.json")
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(all_questions, f, ensure_ascii=False, indent=2)
     
-    print(f"\n[OK] Всего сгенерировано {len(all_questions)} вопросов")
+    print(f"\n[OK] Всего сгенерировано {len(all_questions)} уникальных вопросов")
     print(f"[FILE] Сохранено в файл: {output_file}")
+    print(f"\n[INFO] Варианты ответов будут автоматически перемешаны при создании раунда.")
+    print(f"[INFO] Это означает, что каждый вопрос будет иметь разные варианты ответов в каждой игре.")
     print(f"\nТемы:")
     for theme_code, theme_data in THEMES_QUESTIONS.items():
         count = sum(1 for q in all_questions if q["theme_code"] == theme_code)
-        print(f"  - {theme_data['name']}: {count} вопросов")
+        print(f"  - {theme_data['name']}: {count} уникальных вопросов")
 
 if __name__ == "__main__":
     import random
