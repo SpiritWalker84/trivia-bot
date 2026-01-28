@@ -3,6 +3,12 @@
 Скрипт для очистки базы данных от артефактов в вопросах:
 1. Удаляет из вариантов ответов текст вида "ChatGPT & DeepSeek [дата]"
 2. Убирает номера перед вопросами (например, "75. Какое животное...")
+3. Находит вопросы с одинаковым текстом, но разным порядком вариантов ответов (--find-duplicates)
+
+Использование:
+  python scripts/cleanup_question_artifacts.py                    # Очистка артефактов
+  python scripts/cleanup_question_artifacts.py --dry-run         # Проверка без сохранения
+  python scripts/cleanup_question_artifacts.py --find-duplicates # Поиск дубликатов
 """
 import sys
 import os
@@ -98,6 +104,85 @@ def clean_option_letter_prefix(text: str) -> str:
     return cleaned
 
 
+def normalize_options(options: dict) -> set:
+    """
+    Нормализует варианты ответов для сравнения (убирает пробелы, приводит к нижнему регистру).
+    
+    Args:
+        options: Словарь с вариантами ответов {'a': '...', 'b': '...', 'c': '...', 'd': '...'}
+        
+    Returns:
+        Множество нормализованных вариантов ответов
+    """
+    normalized = set()
+    for key in ['a', 'b', 'c', 'd']:
+        value = options.get(key, '').strip().lower()
+        if value and value != 'нет данных':
+            normalized.add(value)
+    return normalized
+
+
+def find_duplicate_questions_by_text(session) -> dict:
+    """
+    Находит вопросы с одинаковым текстом, но разным порядком вариантов ответов.
+    
+    Args:
+        session: SQLAlchemy session
+        
+    Returns:
+        Словарь с информацией о дубликатах: {question_id: [list of duplicate_ids]}
+    """
+    from collections import defaultdict
+    
+    # Группируем вопросы по тексту вопроса и теме
+    questions_by_text = defaultdict(list)
+    
+    all_questions = session.query(Question).filter(Question.is_approved == True).all()
+    
+    for question in all_questions:
+        # Нормализуем текст вопроса для группировки
+        normalized_text = (question.question_text or '').strip().lower()
+        if normalized_text:
+            key = (normalized_text, question.theme_id)
+            questions_by_text[key].append(question)
+    
+    # Находим дубликаты (группы с более чем одним вопросом)
+    duplicates = {}
+    
+    for (text, theme_id), questions in questions_by_text.items():
+        if len(questions) > 1:
+            # Для каждой группы проверяем, имеют ли вопросы одинаковые варианты ответов
+            for i, q1 in enumerate(questions):
+                options1 = normalize_options({
+                    'a': q1.option_a or '',
+                    'b': q1.option_b or '',
+                    'c': q1.option_c or '',
+                    'd': q1.option_d or ''
+                })
+                
+                # Ищем дубликаты среди остальных вопросов в группе
+                duplicate_ids = []
+                for j, q2 in enumerate(questions):
+                    if i != j:  # Не сравниваем вопрос с самим собой
+                        options2 = normalize_options({
+                            'a': q2.option_a or '',
+                            'b': q2.option_b or '',
+                            'c': q2.option_c or '',
+                            'd': q2.option_d or ''
+                        })
+                        
+                        # Если варианты ответов одинаковые (независимо от порядка)
+                        if options1 == options2:
+                            duplicate_ids.append(q2.id)
+                
+                if duplicate_ids:
+                    # Сохраняем только если еще не добавлено
+                    if q1.id not in duplicates:
+                        duplicates[q1.id] = duplicate_ids
+    
+    return duplicates
+
+
 def clean_question_number(text: str) -> str:
     """
     Убирает номер перед вопросом (например, "75. Какое животное..." -> "Какое животное...")
@@ -118,6 +203,76 @@ def clean_question_number(text: str) -> str:
     cleaned = re.sub(pattern, '', text)
     
     return cleaned
+
+
+def find_and_report_duplicates(dry_run: bool = False) -> dict:
+    """
+    Находит и сообщает о дубликатах вопросов с одинаковым текстом, но разным порядком вариантов.
+    
+    Args:
+        dry_run: Если True, только показывает что будет найдено
+        
+    Returns:
+        Словарь со статистикой поиска дубликатов
+    """
+    stats = {
+        "total_checked": 0,
+        "duplicate_groups": 0,
+        "duplicate_questions": 0,
+        "duplicate_details": []
+    }
+    
+    with db_session() as session:
+        # Получаем все вопросы
+        questions = session.query(Question).filter(Question.is_approved == True).all()
+        stats["total_checked"] = len(questions)
+        
+        logger.info(f"Проверяю {stats['total_checked']} вопросов на дубликаты...")
+        
+        # Находим дубликаты
+        duplicates = find_duplicate_questions_by_text(session)
+        
+        # Обрабатываем найденные дубликаты
+        processed_ids = set()
+        
+        for question_id, duplicate_ids in duplicates.items():
+            if question_id in processed_ids:
+                continue
+            
+            # Получаем основной вопрос
+            main_question = session.query(Question).filter(Question.id == question_id).first()
+            if not main_question:
+                continue
+            
+            # Получаем все дубликаты (включая основной)
+            all_duplicate_ids = [question_id] + duplicate_ids
+            all_duplicates = session.query(Question).filter(Question.id.in_(all_duplicate_ids)).all()
+            
+            # Помечаем все ID как обработанные
+            processed_ids.update(all_duplicate_ids)
+            
+            stats["duplicate_groups"] += 1
+            stats["duplicate_questions"] += len(all_duplicates) - 1  # -1 потому что один основной
+            
+            # Сохраняем детали для отчета
+            group_info = {
+                "main_id": question_id,
+                "duplicate_ids": duplicate_ids,
+                "question_text": main_question.question_text[:100] + "..." if len(main_question.question_text) > 100 else main_question.question_text,
+                "theme_id": main_question.theme_id,
+                "all_ids": all_duplicate_ids
+            }
+            stats["duplicate_details"].append(group_info)
+            
+            logger.info(
+                f"Найдена группа дубликатов:\n"
+                f"  Основной вопрос ID: {question_id}\n"
+                f"  Дубликаты: {duplicate_ids}\n"
+                f"  Текст: {group_info['question_text']}\n"
+                f"  Тема ID: {main_question.theme_id}"
+            )
+    
+    return stats
 
 
 def cleanup_questions(dry_run: bool = False) -> dict:
@@ -259,18 +414,63 @@ def main():
         action='store_true',
         help='Показать что будет изменено, но не сохранять изменения'
     )
+    parser.add_argument(
+        '--find-duplicates',
+        action='store_true',
+        help='Найти вопросы с одинаковым текстом, но разным порядком вариантов ответов'
+    )
     
     args = parser.parse_args()
     
-    print("="*60)
-    print("ОЧИСТКА БАЗЫ ДАННЫХ ОТ АРТЕФАКТОВ")
-    print("="*60)
-    if args.dry_run:
-        print("[РЕЖИМ ПРОВЕРКИ] Изменения не будут сохранены")
-    print()
-    
-    try:
-        stats = cleanup_questions(dry_run=args.dry_run)
+    if args.find_duplicates:
+        # Режим поиска дубликатов
+        print("="*60)
+        print("ПОИСК ДУБЛИКАТОВ ВОПРОСОВ")
+        print("="*60)
+        print("Ищу вопросы с одинаковым текстом, но разным порядком вариантов ответов...")
+        print()
+        
+        try:
+            stats = find_and_report_duplicates(dry_run=args.dry_run)
+            
+            print()
+            print("="*60)
+            print("РЕЗУЛЬТАТЫ ПОИСКА ДУБЛИКАТОВ")
+            print("="*60)
+            print(f"Всего проверено вопросов: {stats['total_checked']}")
+            print(f"Найдено групп дубликатов: {stats['duplicate_groups']}")
+            print(f"Найдено дубликатов: {stats['duplicate_questions']}")
+            print("="*60)
+            
+            if stats['duplicate_details']:
+                print("\nДетали найденных дубликатов:")
+                for i, group in enumerate(stats['duplicate_details'], 1):
+                    print(f"\n{i}. Группа дубликатов:")
+                    print(f"   Основной вопрос ID: {group['main_id']}")
+                    print(f"   Дубликаты ID: {group['duplicate_ids']}")
+                    print(f"   Текст: {group['question_text']}")
+                    print(f"   Тема ID: {group['theme_id']}")
+                    print(f"   Всего вопросов в группе: {len(group['all_ids'])}")
+                
+                print("\n[INFO] Для удаления дубликатов используйте отдельный скрипт или SQL запрос.")
+            else:
+                print("\n[INFO] Дубликаты не найдены!")
+            
+        except Exception as e:
+            logger.error(f"Критическая ошибка при поиске дубликатов: {e}", exc_info=True)
+            print(f"\n[ERROR] Ошибка при поиске дубликатов: {e}")
+            sys.exit(1)
+    else:
+        # Режим очистки артефактов
+        print("="*60)
+        print("ОЧИСТКА БАЗЫ ДАННЫХ ОТ АРТЕФАКТОВ")
+        print("="*60)
+        if args.dry_run:
+            print("[РЕЖИМ ПРОВЕРКИ] Изменения не будут сохранены")
+        print()
+        
+        try:
+            stats = cleanup_questions(dry_run=args.dry_run)
         
         print()
         print("="*60)
