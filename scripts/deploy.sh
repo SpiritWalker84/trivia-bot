@@ -151,8 +151,8 @@ if systemctl list-units --type=service | grep -q "trivia-bot"; then
 else
     print_warning "Systemd services not found. Please restart services manually:"
     echo "  - Bot: ./start.sh or python main.py"
-    echo "  - Celery worker: celery -A tasks.celery_app worker --loglevel=info"
-    echo "  - Celery beat: celery -A tasks.celery_app beat --loglevel=info"
+    echo "  - Celery worker: celery -A tasks.celery_app worker --loglevel=error"
+    echo "  - Celery beat: celery -A tasks.celery_app beat --loglevel=error"
 fi
 
 # Summary

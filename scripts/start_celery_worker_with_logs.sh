@@ -15,6 +15,6 @@ echo "Starting Celery worker with logging to logs/celery_worker.log"
 echo "Press Ctrl+C to stop"
 
 celery -A tasks.celery_app worker \
-    --loglevel=info \
+    --loglevel=error \
     --logfile=logs/celery_worker.log \
     --pidfile=logs/celery_worker.pid

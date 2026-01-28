@@ -86,7 +86,7 @@ class Config:
     DATABASE_RETRY_DELAY: float = float(os.getenv("DATABASE_RETRY_DELAY", "1.0"))
     
     # Logging
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "ERROR")
     LOG_FILE: str = os.getenv("LOG_FILE", "logs/trivia_bot.log")
     LOG_FORMAT: str = os.getenv(
         "LOG_FORMAT",
