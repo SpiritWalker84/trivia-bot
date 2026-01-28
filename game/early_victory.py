@@ -23,7 +23,7 @@ class EarlyVictoryChecker:
         Check if early victory is possible in final round.
         
         Early victory condition:
-        - Only in final round (2 players remaining, round 10)
+        - Only in final round (2 players remaining)
         - After each question, check: S_loser + Q_remaining < S_leader
         - If true, leader wins immediately
         
@@ -49,7 +49,7 @@ class EarlyVictoryChecker:
             if not round_obj:
                 return None
             
-            # Check if this is final round (2 players, round 10)
+            # Check if this is final round (2 players)
             alive_players = [
                 gp for gp in game.players
                 if not gp.is_eliminated

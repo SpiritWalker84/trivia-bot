@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from database.session import db_session
 from database.models import Game, GamePlayer
 from database.queries import UserQueries, GameQueries
+import config
 from tasks.game_tasks import start_game_task
 from utils.logging import setup_logging, get_logger
 
@@ -48,7 +49,7 @@ def main():
                 session,
                 game_type='training',
                 creator_id=user.id,
-                total_rounds=10
+                total_rounds=config.config.ROUNDS_PER_GAME
             )
             
             # Add user

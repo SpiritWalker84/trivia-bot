@@ -4,6 +4,7 @@ Database query helpers - common database operations.
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func, desc, asc, select
+import config
 from database.models import (
     User,
     Game,
@@ -98,7 +99,7 @@ class GameQueries:
         game_type: str,
         creator_id: Optional[int] = None,
         theme_id: Optional[int] = None,
-        total_rounds: int = 10
+        total_rounds: int = config.config.ROUNDS_PER_GAME
     ) -> Game:
         """Create a new game."""
         game = Game(

@@ -499,7 +499,7 @@ async def handle_training_difficulty(update: Update, context, data: str) -> None
                 session,
                 game_type='training',
                 creator_id=db_user.id,
-                total_rounds=10
+                total_rounds=config.config.ROUNDS_PER_GAME
             )
             
             # Set bot difficulty for the game (use selected difficulty, not bot's stored difficulty)

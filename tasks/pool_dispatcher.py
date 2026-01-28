@@ -93,7 +93,7 @@ def start_game_from_pool(pool_id: int, player_ids: List[int]) -> None:
             session,
             game_type='quick',
             theme_id=None,  # Mixed theme
-            total_rounds=10
+            total_rounds=config.config.ROUNDS_PER_GAME
         )
         
         # Add players
@@ -145,7 +145,7 @@ def start_voting_from_pool(pool_id: int, player_ids: List[int]) -> None:
             session,
             game_type='quick',
             theme_id=None,
-            total_rounds=10
+            total_rounds=config.config.ROUNDS_PER_GAME
         )
         game.status = 'pre_start'
         session.flush()

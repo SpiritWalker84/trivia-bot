@@ -532,7 +532,8 @@ class GameNotifications:
                 bot_mark = " (бот)" if result['is_bot'] else ""
                 results_text += (
                     f"{i}. {result['username']}{bot_mark} - "
-                    f"{result['correct_answers']}/10 ({result['total_time']:.1f}с) {status}\n"
+                    f"{result['correct_answers']}/{self.config.QUESTIONS_PER_ROUND} "
+                    f"({result['total_time']:.1f}с) {status}\n"
                 )
             
             if eliminated_user_id:

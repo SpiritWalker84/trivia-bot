@@ -142,7 +142,7 @@ class Game(Base, TimestampMixin):
     creator_id = Column(BigInteger, ForeignKey("users.id"), nullable=True)
     theme_id = Column(BigInteger, ForeignKey("themes.id"), nullable=True)  # NULL = mixed
     status = Column(String(20), nullable=False)  # 'waiting', 'pre_start', 'in_progress', 'finished', 'cancelled', 'error_pause'
-    total_rounds = Column(Integer, nullable=False, default=10)
+    total_rounds = Column(Integer, nullable=False, default=9)
     is_final_stage = Column(Boolean, nullable=False, default=False)
     current_round = Column(Integer, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)

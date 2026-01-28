@@ -8,6 +8,7 @@ from database.queries import UserQueries, GameQueries
 from database.models import Game, GamePlayer
 from utils.logging import get_logger
 from tasks.game_tasks import start_game_task
+import config
 
 logger = get_logger(__name__)
 
@@ -108,7 +109,7 @@ async def handle_private_game_create_with_friends(update: Update, context) -> No
             session,
             game_type='private',
             creator_id=db_creator.id,
-            total_rounds=10
+            total_rounds=config.config.ROUNDS_PER_GAME
         )
         
         # Add creator as first player (auto-confirmed)
