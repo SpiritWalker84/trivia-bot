@@ -100,13 +100,28 @@ def import_questions_from_json(json_file_path: str) -> dict:
                     continue
                 
                 # Проверяем, нет ли уже такого вопроса
+                # Проверяем по тексту вопроса, правильному ответу и вариантам ответов
+                # Это позволяет импортировать вопросы с одинаковым текстом, но разными вариантами ответов
+                question_text = q_data.get("question_text", "")
+                correct_option = q_data.get("correct_option", "A")
+                option_a = q_data.get("option_a", "")
+                option_b = q_data.get("option_b", "")
+                option_c = q_data.get("option_c", "Нет данных")
+                option_d = q_data.get("option_d", "Нет данных")
+                
+                # Проверяем дубликат по комбинации: текст + правильный ответ + все варианты
                 existing = session.query(Question).filter(
-                    Question.question_text == q_data.get("question_text"),
-                    Question.theme_id == theme_id
+                    Question.question_text == question_text,
+                    Question.theme_id == theme_id,
+                    Question.correct_option == correct_option,
+                    Question.option_a == option_a,
+                    Question.option_b == option_b,
+                    Question.option_c == option_c,
+                    Question.option_d == option_d
                 ).first()
                 
                 if existing:
-                    logger.debug(f"Вопрос {idx}: уже существует в БД, пропускаю")
+                    logger.debug(f"Вопрос {idx}: уже существует в БД (полный дубликат), пропускаю")
                     stats["skipped"] += 1
                     continue
                 
