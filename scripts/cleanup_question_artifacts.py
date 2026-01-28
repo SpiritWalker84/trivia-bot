@@ -382,6 +382,42 @@ def find_and_report_duplicates(dry_run: bool = False) -> dict:
     return stats
 
 
+def scan_option_prefixes(limit: int = 20) -> dict:
+    """
+    Сканирует варианты ответов на наличие префиксов A)/B)/C)/D) и показывает примеры.
+    Ищет в начале строки и после перевода строки.
+    """
+    stats = {
+        "total_checked": 0,
+        "matches": 0,
+        "examples": []
+    }
+    pattern = re.compile(r'(^|\n)\s*[A-DА-Г]\s*\)\s*', re.IGNORECASE)
+    with db_session() as session:
+        questions = session.query(Question).all()
+        stats["total_checked"] = len(questions)
+        for question in questions:
+            for label, opt in [("A", question.option_a), ("B", question.option_b), ("C", question.option_c), ("D", question.option_d)]:
+                if not opt:
+                    continue
+                normalized = (
+                    opt.replace("\u00A0", " ")
+                    .replace("\u202F", " ")
+                    .replace("\u2009", " ")
+                    .replace("\u200B", "")
+                    .replace("\ufeff", "")
+                )
+                if pattern.search(normalized):
+                    stats["matches"] += 1
+                    if len(stats["examples"]) < limit:
+                        stats["examples"].append({
+                            "question_id": question.id,
+                            "option": label,
+                            "text": normalized[:200]
+                        })
+    return stats
+
+
 def cleanup_questions(dry_run: bool = False) -> dict:
     """
     Очищает вопросы от артефактов.
@@ -529,9 +565,28 @@ def main():
         action='store_true',
         help='Удалить дубликаты (пометить как неодобренные). Оставляет самый старый вопрос в группе.'
     )
+    parser.add_argument(
+        '--scan-option-prefixes',
+        action='store_true',
+        help='Показать примеры вариантов ответов с A)/B)/C)/D)'
+    )
     
     args = parser.parse_args()
     
+    if args.scan_option_prefixes:
+        print("="*60)
+        print("ПОИСК ПРЕФИКСОВ A)/B)/C)/D) В ОТВЕТАХ")
+        print("="*60)
+        stats = scan_option_prefixes()
+        print(f"Всего проверено вопросов: {stats['total_checked']}")
+        print(f"Найдено совпадений: {stats['matches']}")
+        if stats["examples"]:
+            print("\nПримеры:")
+            for ex in stats["examples"]:
+                print(f"- QID {ex['question_id']} option {ex['option']}: {ex['text']}")
+        else:
+            print("\nСовпадений не найдено.")
+        return
     if args.find_duplicates:
         # Режим поиска дубликатов
         print("="*60)
