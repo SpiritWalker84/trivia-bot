@@ -49,7 +49,7 @@ def extract_text_from_odt(odt_path: str) -> str:
     return '\n'.join(text_parts)
 
 
-def parse_questions_from_text(text: str) -> list:
+def parse_questions_from_text(text: str) -> tuple[list, int]:
     """
     Парсит вопросы из текста.
     Ожидаемый формат:
@@ -61,11 +61,12 @@ def parse_questions_from_text(text: str) -> list:
         text: Текст документа
         
     Returns:
-        Список словарей с вопросами
+        Tuple of (список словарей с вопросами, количество пропущенных вопросов без правильного ответа)
     """
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     
     questions = []
+    skipped_count = 0
     current_question = None
     current_options = []
     current_correct = None
@@ -91,12 +92,17 @@ def parse_questions_from_text(text: str) -> list:
         # Вопрос обычно содержит знак вопроса или начинается с числа
         if '?' in line or (line and (line[0].isdigit() or line.startswith('Вопрос'))):
             # Сохраняем предыдущий вопрос, если есть
-            if current_question and current_options:
+            # Исключаем вопросы без указанного правильного ответа
+            if current_question and current_options and current_correct:
                 questions.append({
                     'question_text': current_question,
                     'options': current_options,
-                    'correct_option': current_correct or 'A'
+                    'correct_option': current_correct
                 })
+            elif current_question and current_options and not current_correct:
+                # Вопрос без правильного ответа - пропускаем
+                skipped_count += 1
+                print(f"  [ПРОПУЩЕН] Вопрос без правильного ответа: {current_question[:80]}...")
             
             # Начинаем новый вопрос
             current_question = line
@@ -148,14 +154,19 @@ def parse_questions_from_text(text: str) -> list:
         i += 1
     
     # Сохраняем последний вопрос
-    if current_question and current_options:
+    # Исключаем вопросы без указанного правильного ответа
+    if current_question and current_options and current_correct:
         questions.append({
             'question_text': current_question,
             'options': current_options,
-            'correct_option': current_correct or 'A'
+            'correct_option': current_correct
         })
+    elif current_question and current_options and not current_correct:
+        # Вопрос без правильного ответа - пропускаем
+        skipped_count += 1
+        print(f"  [ПРОПУЩЕН] Последний вопрос без правильного ответа: {current_question[:80]}...")
     
-    return questions
+    return questions, skipped_count
 
 
 def convert_to_import_format(questions: list, theme_code: str = "general", theme_name: str = "Общие") -> list:
@@ -230,8 +241,10 @@ def main():
         
         # Парсим вопросы
         print("Парсинг вопросов...")
-        questions = parse_questions_from_text(text)
-        print(f"Найдено {len(questions)} вопросов")
+        questions, skipped_count = parse_questions_from_text(text)
+        print(f"Найдено {len(questions)} вопросов с правильными ответами")
+        if skipped_count > 0:
+            print(f"Пропущено {skipped_count} вопросов без указанного правильного ответа")
         
         if not questions:
             print("\n[WARNING] Вопросы не найдены!")
@@ -250,6 +263,8 @@ def main():
             json.dump(import_format, f, ensure_ascii=False, indent=2)
         
         print(f"\n[OK] Обработано {len(import_format)} вопросов")
+        if skipped_count > 0:
+            print(f"[INFO] Пропущено {skipped_count} вопросов без правильного ответа")
         print(f"[FILE] Сохранено в файл: {output_file}")
         print(f"\nПримеры вопросов:")
         for i, q in enumerate(import_format[:3], 1):
