@@ -88,12 +88,19 @@ def clean_option_letter_prefix(text: str) -> str:
     if not text:
         return text
     
-    # Паттерн для удаления букв A), B), C), D) или А), Б), В), Г) в начале строки
-    # Может быть с точкой или скобкой, с пробелом или без после
-    # Примеры: "A)", "A. ", "А)", "Б. " и т.д.
+    # Паттерны для удаления букв A), B), C), D) или А), Б), В), Г) в начале строки
+    # Различные варианты форматирования:
+    # - A) текст
+    # - A. текст
+    # - A текст (с пробелом)
+    # - А) текст (русские буквы)
+    # - A)текст (без пробела после скобки)
+    # - A.текст (без пробела после точки)
+    # - A ) текст (с пробелом перед скобкой)
+    # - A . текст (с пробелом перед точкой)
     patterns = [
-        r'^[A-DА-Г][\.\)]\s*',  # A), A., А), А.
-        r'^[A-DА-Г]\s+',  # A , А  (с пробелом)
+        r'^[A-DА-Г]\s*[\.\)]\s*',  # A), A., A ), A . (с пробелами или без)
+        r'^[A-DА-Г]\s+',  # A , А  (с пробелом, но без точки/скобки)
     ]
     
     cleaned = text
@@ -415,6 +422,18 @@ def cleanup_questions(dry_run: bool = False) -> dict:
                     'd': question.option_d
                 }
                 
+                # Сначала проверяем, были ли удалены буквы A), B), C), D) из оригинальных вариантов
+                # (до очистки артефактов Telegram, чтобы не пропустить)
+                # Считаем отдельно для каждого варианта ответа
+                if clean_option_letter_prefix(original_options['a']) != original_options['a']:
+                    stats["option_letters_removed"] += 1
+                if clean_option_letter_prefix(original_options['b']) != original_options['b']:
+                    stats["option_letters_removed"] += 1
+                if clean_option_letter_prefix(original_options['c']) != original_options['c']:
+                    stats["option_letters_removed"] += 1
+                if clean_option_letter_prefix(original_options['d']) != original_options['d']:
+                    stats["option_letters_removed"] += 1
+                
                 # Сначала очищаем от артефактов Telegram, затем убираем буквы A), B), C), D)
                 cleaned_a = clean_telegram_artifact(question.option_a or '')
                 cleaned_b = clean_telegram_artifact(question.option_b or '')
@@ -438,17 +457,6 @@ def cleanup_questions(dry_run: bool = False) -> dict:
                 if options_changed:
                     updated = True
                     stats["options_cleaned"] += 1
-                    
-                    # Проверяем, были ли удалены буквы A), B), C), D) из оригинальных вариантов
-                    # Считаем отдельно для каждого варианта ответа
-                    if clean_option_letter_prefix(original_options['a']) != original_options['a']:
-                        stats["option_letters_removed"] += 1
-                    if clean_option_letter_prefix(original_options['b']) != original_options['b']:
-                        stats["option_letters_removed"] += 1
-                    if clean_option_letter_prefix(original_options['c']) != original_options['c']:
-                        stats["option_letters_removed"] += 1
-                    if clean_option_letter_prefix(original_options['d']) != original_options['d']:
-                        stats["option_letters_removed"] += 1
                     
                     if not dry_run:
                         question.option_a = cleaned_a
