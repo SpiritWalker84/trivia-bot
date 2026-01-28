@@ -420,14 +420,10 @@ def cleanup_questions(dry_run: bool = False) -> dict:
                 # Проверяем, были ли удалены буквы A), B), C), D) после очистки артефактов Telegram
                 # (проверяем на вариантах после очистки Telegram, но до удаления букв)
                 # Считаем отдельно для каждого варианта ответа
-                if clean_option_letter_prefix(after_telegram_a) != after_telegram_a:
-                    stats["option_letters_removed"] += 1
-                if clean_option_letter_prefix(after_telegram_b) != after_telegram_b:
-                    stats["option_letters_removed"] += 1
-                if clean_option_letter_prefix(after_telegram_c) != after_telegram_c:
-                    stats["option_letters_removed"] += 1
-                if clean_option_letter_prefix(after_telegram_d) != after_telegram_d:
-                    stats["option_letters_removed"] += 1
+                for opt_name, opt_value in [('a', after_telegram_a), ('b', after_telegram_b), ('c', after_telegram_c), ('d', after_telegram_d)]:
+                    if opt_value and clean_option_letter_prefix(opt_value) != opt_value:
+                        stats["option_letters_removed"] += 1
+                        logger.debug(f"Вопрос ID {question.id}: найдена буква в варианте {opt_name.upper()}: '{opt_value[:50]}'")
                 
                 # Убираем буквы A), B), C), D) из начала вариантов ответов
                 cleaned_a = clean_option_letter_prefix(after_telegram_a)
