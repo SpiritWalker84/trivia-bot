@@ -326,7 +326,7 @@ def send_next_question(game_id: int, round_id: int, current_question_number: int
             
             # Send next question with a short delay (1-2 seconds)
             # This ensures all processing is complete but keeps the game pace fast
-            delay = 2  # 2 seconds delay between questions
+            delay = 1  # 1 second delay between questions
             logger.info(f"Scheduling next question {next_question_number} with {delay}s delay after question {current_question_number}")
             
             from tasks.question_sender import send_question_to_players
