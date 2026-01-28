@@ -212,12 +212,19 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
                 bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
                 for user_id in timed_out_user_ids:
                     try:
+                        user = session.query(User).filter(User.id == user_id).first()
+                        if not user or not user.telegram_id:
+                            logger.warning(
+                                f"collect_answers: no telegram_id for user_id={user_id}, "
+                                f"skipping timeout feedback"
+                            )
+                            continue
                         # Use a dedicated event loop to avoid "event loop is closed" issues in workers
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
                         loop.run_until_complete(
                             bot.send_message(
-                                chat_id=user_id,
+                                chat_id=user.telegram_id,
                                 text=f"⏰ Время вышло. Правильный ответ: {correct_option_display}"
                             )
                         )
