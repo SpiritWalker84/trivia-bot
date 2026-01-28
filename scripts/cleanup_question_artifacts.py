@@ -440,13 +440,14 @@ def cleanup_questions(dry_run: bool = False) -> dict:
                     stats["options_cleaned"] += 1
                     
                     # Проверяем, были ли удалены буквы A), B), C), D) из оригинальных вариантов
-                    letters_removed = (
-                        clean_option_letter_prefix(original_options['a']) != original_options['a'] or
-                        clean_option_letter_prefix(original_options['b']) != original_options['b'] or
-                        clean_option_letter_prefix(original_options['c']) != original_options['c'] or
-                        clean_option_letter_prefix(original_options['d']) != original_options['d']
-                    )
-                    if letters_removed:
+                    # Считаем отдельно для каждого варианта ответа
+                    if clean_option_letter_prefix(original_options['a']) != original_options['a']:
+                        stats["option_letters_removed"] += 1
+                    if clean_option_letter_prefix(original_options['b']) != original_options['b']:
+                        stats["option_letters_removed"] += 1
+                    if clean_option_letter_prefix(original_options['c']) != original_options['c']:
+                        stats["option_letters_removed"] += 1
+                    if clean_option_letter_prefix(original_options['d']) != original_options['d']:
                         stats["option_letters_removed"] += 1
                     
                     if not dry_run:
