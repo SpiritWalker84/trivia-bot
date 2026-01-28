@@ -197,10 +197,17 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
                 timed_out_user_ids.append(game_player.user_id)
         
         session.commit()
+        logger.info(
+            f"collect_answers: round_question_id={round_question_id} timed_out_user_ids={timed_out_user_ids}"
+        )
 
         # Notify users who didn't answer with the correct option
         if timed_out_user_ids:
             correct_option_display = round_question.correct_option_shuffled or question.correct_option
+            logger.info(
+                f"collect_answers: sending timeout feedback for round_question_id={round_question_id} "
+                f"correct_option={correct_option_display}"
+            )
             try:
                 bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
                 for user_id in timed_out_user_ids:
