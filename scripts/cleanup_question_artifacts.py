@@ -88,15 +88,22 @@ def clean_option_letter_prefix(text: str) -> str:
     if not text:
         return text
     
-    # Паттерн для удаления букв A), B), C), D) или А), Б), В), Г) в начале строки
+    # Удаляем буквенные префиксы A)/B)/C)/D) или А)/Б)/В)/Г) в начале строки или строки после переноса
     # Формат: [пробелы] + буква + [пробелы] + ")" + [пробелы]
     # Примеры: "A) текст", "A ) текст", " А) текст", "А) текст"
-    # Нормализуем неразрывные пробелы, чтобы \s покрывал все варианты
-    normalized = text.replace("\u00A0", " ").replace("\u202F", " ").replace("\u2009", " ")
-    pattern = r'^\s*[A-DА-Г]\s*\)\s*'
+    # Также обрабатываем варианты на новой строке внутри опции.
+    # Нормализуем проблемные пробелы/символы, чтобы \s покрывал все варианты.
+    normalized = (
+        text.replace("\u00A0", " ")
+        .replace("\u202F", " ")
+        .replace("\u2009", " ")
+        .replace("\u200B", "")
+        .replace("\ufeff", "")
+    )
+    pattern = r'(^|\n)\s*[A-DА-Г]\s*\)\s*'
     
     # Удаляем букву + закрывающую скобку + пробел в начале строки
-    cleaned = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
+    cleaned = re.sub(pattern, r'\1', normalized, flags=re.IGNORECASE | re.MULTILINE)
     
     # Убираем лишние пробелы в начале (на случай если пробела не было)
     cleaned = cleaned.lstrip()
