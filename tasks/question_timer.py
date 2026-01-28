@@ -144,6 +144,24 @@ def update_question_timer(
         
         # Rebuild keyboard to keep buttons (use shuffled options if available)
         from bot.keyboards import QuestionAnswerKeyboard
+        from database.models import User, GamePlayer
+        
+        # Get internal user_id (not telegram_id) for leave_game callback
+        db_user = session.query(User).filter(User.telegram_id == user_id).first()
+        current_user_id = db_user.id if db_user else None
+        
+        # Check if player is still in game and hasn't left
+        leave_callback_data = None
+        if current_user_id and round_obj:
+            game_player = session.query(GamePlayer).filter(
+                GamePlayer.game_id == round_obj.game_id,
+                GamePlayer.user_id == current_user_id
+            ).first()
+            
+            # Only show leave button if player is active and hasn't left
+            if game_player and not game_player.is_eliminated and not game_player.left_game:
+                leave_callback_data = f"leave_game:{round_obj.game_id}:{current_user_id}"
+        
         options = {}
         
         # Use shuffled options if available, otherwise use original
@@ -173,7 +191,11 @@ def update_question_timer(
             if question.option_d:
                 options['D'] = question.option_d
         
-        keyboard = QuestionAnswerKeyboard.get_keyboard(round_question_id, options)
+        keyboard = QuestionAnswerKeyboard.get_keyboard(
+            round_question_id,
+            options,
+            leave_callback_data=leave_callback_data
+        )
     
     # Update message with keyboard preserved
     try:
