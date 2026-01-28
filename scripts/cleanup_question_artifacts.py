@@ -617,31 +617,31 @@ def main():
         
         try:
             stats = cleanup_questions(dry_run=args.dry_run)
-        
-        print()
-        print("="*60)
-        print("РЕЗУЛЬТАТЫ ОЧИСТКИ")
-        print("="*60)
-        print(f"Всего проверено вопросов: {stats['total_checked']}")
-        print(f"Вопросов обновлено: {stats['questions_updated']}")
-        print(f"Вариантов ответов очищено: {stats['options_cleaned']}")
-        print(f"Букв A), B), C), D) удалено: {stats['option_letters_removed']}")
-        print(f"Номеров удалено из вопросов: {stats['question_numbers_removed']}")
-        print(f"Ошибок: {stats['errors']}")
-        print("="*60)
-        
-        if args.dry_run:
-            print("\n[INFO] Это был режим проверки. Для применения изменений запустите:")
-            print("python scripts/cleanup_question_artifacts.py")
-        elif stats["questions_updated"] > 0:
-            print(f"\n[OK] Очистка завершена успешно!")
-        else:
-            print(f"\n[INFO] Артефакты не найдены, база данных чистая")
-        
-    except Exception as e:
-        logger.error(f"Критическая ошибка при очистке: {e}", exc_info=True)
-        print(f"\n[ERROR] Ошибка при очистке: {e}")
-        sys.exit(1)
+            
+            print()
+            print("="*60)
+            print("РЕЗУЛЬТАТЫ ОЧИСТКИ")
+            print("="*60)
+            print(f"Всего проверено вопросов: {stats['total_checked']}")
+            print(f"Вопросов обновлено: {stats['questions_updated']}")
+            print(f"Вариантов ответов очищено: {stats['options_cleaned']}")
+            print(f"Букв A), B), C), D) удалено: {stats['option_letters_removed']}")
+            print(f"Номеров удалено из вопросов: {stats['question_numbers_removed']}")
+            print(f"Ошибок: {stats['errors']}")
+            print("="*60)
+            
+            if args.dry_run:
+                print("\n[INFO] Это был режим проверки. Для применения изменений запустите:")
+                print("python scripts/cleanup_question_artifacts.py")
+            elif stats["questions_updated"] > 0:
+                print(f"\n[OK] Очистка завершена успешно!")
+            else:
+                print(f"\n[INFO] Артефакты не найдены, база данных чистая")
+            
+        except Exception as e:
+            logger.error(f"Критическая ошибка при очистке: {e}", exc_info=True)
+            print(f"\n[ERROR] Ошибка при очистке: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
