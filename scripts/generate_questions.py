@@ -760,7 +760,7 @@ THEMES_QUESTIONS = {
     },
 }
 
-def generate_questions_for_theme(theme_code: str, theme_data: dict, count: int = 100) -> list:
+def generate_questions_for_theme(theme_code: str, theme_data: dict, count: int = 500) -> list:
     """Генерирует вопросы для темы, дублируя существующие до нужного количества."""
     questions = []
     base_questions = theme_data["questions"]
@@ -800,7 +800,7 @@ def main():
     print("Генерация вопросов...")
     for theme_code, theme_data in THEMES_QUESTIONS.items():
         print(f"  Генерация вопросов для темы: {theme_data['name']} ({theme_code})...")
-        questions = generate_questions_for_theme(theme_code, theme_data, count=100)
+        questions = generate_questions_for_theme(theme_code, theme_data, count=500)
         all_questions.extend(questions)
         print(f"    Сгенерировано {len(questions)} вопросов")
     
