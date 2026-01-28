@@ -4,11 +4,13 @@
 1. Удаляет из вариантов ответов текст вида "ChatGPT & DeepSeek [дата]"
 2. Убирает номера перед вопросами (например, "75. Какое животное...")
 3. Находит вопросы с одинаковым текстом, но разным порядком вариантов ответов (--find-duplicates)
+4. Удаляет дубликаты вопросов (--remove-duplicates)
 
 Использование:
-  python scripts/cleanup_question_artifacts.py                    # Очистка артефактов
-  python scripts/cleanup_question_artifacts.py --dry-run         # Проверка без сохранения
-  python scripts/cleanup_question_artifacts.py --find-duplicates # Поиск дубликатов
+  python scripts/cleanup_question_artifacts.py                      # Очистка артефактов
+  python scripts/cleanup_question_artifacts.py --dry-run           # Проверка без сохранения
+  python scripts/cleanup_question_artifacts.py --find-duplicates     # Поиск дубликатов
+  python scripts/cleanup_question_artifacts.py --remove-duplicates # Удаление дубликатов
 """
 import sys
 import os
@@ -19,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.session import db_session
-from database.models import Question
+from database.models import Question, RoundQuestion
 from utils.logging import setup_logging, get_logger
 
 setup_logging()
@@ -203,6 +205,106 @@ def clean_question_number(text: str) -> str:
     cleaned = re.sub(pattern, '', text)
     
     return cleaned
+
+
+def remove_duplicates(dry_run: bool = False) -> dict:
+    """
+    Удаляет дубликаты вопросов (помечает как неодобренные вместо физического удаления).
+    Оставляет самый старый вопрос в каждой группе дубликатов.
+    
+    Args:
+        dry_run: Если True, только показывает что будет удалено, не сохраняет
+        
+    Returns:
+        Словарь со статистикой удаления дубликатов
+    """
+    
+    stats = {
+        "total_checked": 0,
+        "duplicate_groups": 0,
+        "duplicates_marked": 0,
+        "duplicates_skipped": 0,  # Пропущено из-за использования в играх
+        "errors": 0
+    }
+    
+    with db_session() as session:
+        # Получаем все вопросы
+        questions = session.query(Question).filter(Question.is_approved == True).all()
+        stats["total_checked"] = len(questions)
+        
+        logger.info(f"Проверяю {stats['total_checked']} вопросов на дубликаты для удаления...")
+        
+        # Находим дубликаты
+        duplicates = find_duplicate_questions_by_text(session)
+        
+        # Обрабатываем найденные дубликаты
+        processed_ids = set()
+        
+        for question_id, duplicate_ids in duplicates.items():
+            if question_id in processed_ids:
+                continue
+            
+            # Получаем основной вопрос (самый старый по ID)
+            main_question = session.query(Question).filter(Question.id == question_id).first()
+            if not main_question:
+                continue
+            
+            # Получаем все дубликаты (включая основной)
+            all_duplicate_ids = [question_id] + duplicate_ids
+            all_duplicates = session.query(Question).filter(Question.id.in_(all_duplicate_ids)).all()
+            
+            # Сортируем по ID (самый старый первый)
+            all_duplicates.sort(key=lambda q: q.id)
+            
+            # Первый вопрос - оставляем, остальные - помечаем как неодобренные
+            keep_question = all_duplicates[0]
+            duplicates_to_mark = all_duplicates[1:]
+            
+            # Помечаем все ID как обработанные
+            processed_ids.update(all_duplicate_ids)
+            
+            stats["duplicate_groups"] += 1
+            
+            for dup_question in duplicates_to_mark:
+                # Проверяем, используется ли вопрос в играх (RoundQuestion)
+                used_in_rounds = session.query(RoundQuestion).filter(
+                    RoundQuestion.question_id == dup_question.id
+                ).first()
+                
+                if used_in_rounds:
+                    # Вопрос используется в играх - пропускаем удаление
+                    stats["duplicates_skipped"] += 1
+                    logger.warning(
+                        f"Вопрос ID {dup_question.id} используется в играх, пропускаю удаление. "
+                        f"Оставляю вопрос ID {keep_question.id} как основной."
+                    )
+                else:
+                    # Помечаем как неодобренный вместо физического удаления
+                    stats["duplicates_marked"] += 1
+                    
+                    if not dry_run:
+                        dup_question.is_approved = False
+                        logger.info(
+                            f"Помечен как неодобренный вопрос ID {dup_question.id} "
+                            f"(дубликат вопроса ID {keep_question.id})"
+                        )
+                    else:
+                        logger.info(
+                            f"[DRY RUN] Будет помечен как неодобренный вопрос ID {dup_question.id} "
+                            f"(дубликат вопроса ID {keep_question.id})"
+                        )
+            
+            # Коммитим каждые 50 групп для оптимизации
+            if not dry_run and stats["duplicates_marked"] > 0 and stats["duplicates_marked"] % 50 == 0:
+                session.commit()
+                logger.info(f"Помечено {stats['duplicates_marked']} дубликатов...")
+        
+        # Финальный коммит
+        if not dry_run and stats["duplicates_marked"] > 0:
+            session.commit()
+            logger.info(f"Все изменения сохранены в базу данных")
+    
+    return stats
 
 
 def find_and_report_duplicates(dry_run: bool = False) -> dict:
@@ -419,6 +521,11 @@ def main():
         action='store_true',
         help='Найти вопросы с одинаковым текстом, но разным порядком вариантов ответов'
     )
+    parser.add_argument(
+        '--remove-duplicates',
+        action='store_true',
+        help='Удалить дубликаты (пометить как неодобренные). Оставляет самый старый вопрос в группе.'
+    )
     
     args = parser.parse_args()
     
@@ -452,13 +559,52 @@ def main():
                     print(f"   Тема ID: {group['theme_id']}")
                     print(f"   Всего вопросов в группе: {len(group['all_ids'])}")
                 
-                print("\n[INFO] Для удаления дубликатов используйте отдельный скрипт или SQL запрос.")
+                print("\n[INFO] Для удаления дубликатов используйте:")
+                print("python scripts/cleanup_question_artifacts.py --remove-duplicates")
             else:
                 print("\n[INFO] Дубликаты не найдены!")
             
         except Exception as e:
             logger.error(f"Критическая ошибка при поиске дубликатов: {e}", exc_info=True)
             print(f"\n[ERROR] Ошибка при поиске дубликатов: {e}")
+            sys.exit(1)
+    elif args.remove_duplicates:
+        # Режим удаления дубликатов
+        print("="*60)
+        print("УДАЛЕНИЕ ДУБЛИКАТОВ ВОПРОСОВ")
+        print("="*60)
+        if args.dry_run:
+            print("[РЕЖИМ ПРОВЕРКИ] Изменения не будут сохранены")
+        print("Помечаю дубликаты как неодобренные (is_approved=False)")
+        print("Оставляю самый старый вопрос в каждой группе дубликатов")
+        print()
+        
+        try:
+            stats = remove_duplicates(dry_run=args.dry_run)
+            
+            print()
+            print("="*60)
+            print("РЕЗУЛЬТАТЫ УДАЛЕНИЯ ДУБЛИКАТОВ")
+            print("="*60)
+            print(f"Всего проверено вопросов: {stats['total_checked']}")
+            print(f"Найдено групп дубликатов: {stats['duplicate_groups']}")
+            print(f"Помечено как неодобренные: {stats['duplicates_marked']}")
+            print(f"Пропущено (используются в играх): {stats['duplicates_skipped']}")
+            print(f"Ошибок: {stats['errors']}")
+            print("="*60)
+            
+            if args.dry_run:
+                print("\n[INFO] Это был режим проверки. Для применения изменений запустите:")
+                print("python scripts/cleanup_question_artifacts.py --remove-duplicates")
+            elif stats["duplicates_marked"] > 0:
+                print(f"\n[OK] Удаление дубликатов завершено успешно!")
+                print(f"Помечено {stats['duplicates_marked']} дубликатов как неодобренные.")
+            else:
+                print(f"\n[INFO] Дубликаты не найдены или все используются в играх")
+            
+        except Exception as e:
+            logger.error(f"Критическая ошибка при удалении дубликатов: {e}", exc_info=True)
+            print(f"\n[ERROR] Ошибка при удалении дубликатов: {e}")
             sys.exit(1)
     else:
         # Режим очистки артефактов
