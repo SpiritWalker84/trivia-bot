@@ -157,13 +157,14 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
         if not question:
             return
         
-        # Get all alive players
+        # Get all alive players (exclude those who left the game)
         alive_players = [
             gp for gp in game.players
-            if not gp.is_eliminated
+            if not gp.is_eliminated and not gp.left_game
         ]
         
         # For players who didn't answer, mark as incorrect with max time
+        timed_out_user_ids = []
         for game_player in alive_players:
             if game_player.is_bot:
                 # Bots answer automatically (handled separately)
@@ -191,8 +192,29 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
                 )
                 session.add(answer)
                 game_player.total_time += max_time
+                timed_out_user_ids.append(game_player.user_id)
         
         session.commit()
+
+        # Notify users who didn't answer with the correct option
+        if timed_out_user_ids:
+            correct_option_display = round_question.correct_option_shuffled or question.correct_option
+            try:
+                bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
+                for user_id in timed_out_user_ids:
+                    try:
+                        asyncio.run(
+                            bot.send_message(
+                                chat_id=user_id,
+                                text=f"⏰ Время вышло. Правильный ответ: {correct_option_display}"
+                            )
+                        )
+                    except Exception as send_error:
+                        logger.warning(
+                            f"Failed to send timeout feedback to user {user_id}: {send_error}"
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to create bot for timeout feedback: {e}")
         
         # Check if next question was already scheduled by checking if it's already displayed
         # This prevents duplicate scheduling when collect_answers is called multiple times
