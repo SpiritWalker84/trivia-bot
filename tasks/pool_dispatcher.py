@@ -27,6 +27,9 @@ def check_pool(self: Task) -> None:
     Check pool and process players.
     Runs every 5 minutes.
     """
+    # Quick game queue is disabled for now (feature in development).
+    logger.info("check_pool skipped: quick game queue is disabled")
+    return
     with db_session() as session:
         # Get active pool
         pool = PoolQueries.get_or_create_active_pool(session)
@@ -197,8 +200,5 @@ def start_voting_from_pool(pool_id: int, player_ids: List[int]) -> None:
 @celery_app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
     """Setup periodic tasks."""
-    sender.add_periodic_task(
-        config.config.POOL_CHECK_INTERVAL,
-        check_pool.s(),
-        name="Check pool every 5 minutes"
-    )
+    # Disable pool checks while quick game queue is in development
+    logger.info("Periodic pool checks are disabled (quick game queue in development)")
