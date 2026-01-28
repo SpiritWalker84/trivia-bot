@@ -159,9 +159,14 @@ class GameNotifications:
             question_text += f"\n⏱️ {time_limit} сек"
             
             # Create keyboard (use round_question_id from the session)
+            leave_callback_data = None
+            if resolved_game_id and current_user_id:
+                leave_callback_data = f"leave_game:{resolved_game_id}:{current_user_id}"
+            
             keyboard = QuestionAnswerKeyboard.get_keyboard(
                 round_question_id,
-                options
+                options,
+                leave_callback_data=leave_callback_data
             )
             
             # Remove main menu keyboard when sending first question
@@ -377,7 +382,7 @@ class GameNotifications:
             # Get alive players and spectators
             alive_players = [
                 gp for gp in game.players
-                if not gp.is_eliminated
+                if not gp.is_eliminated and not gp.left_game
             ]
             spectators = [
                 gp for gp in game.players
@@ -616,7 +621,7 @@ class GameNotifications:
             # Get all alive players and spectators
             alive_players = [
                 gp for gp in game.players
-                if not gp.is_eliminated
+                if not gp.is_eliminated and not gp.left_game
             ]
             spectators = [
                 gp for gp in game.players

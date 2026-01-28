@@ -121,6 +121,10 @@ async def handle_answer(
             await query.answer("Вы не участвуете в этой игре", show_alert=True)
             return
         
+        if game_player.left_game:
+            await query.answer("Вы вышли из игры", show_alert=False)
+            return
+        
         # Save answer
         answer = Answer(
             game_id=game.id,

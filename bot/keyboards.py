@@ -46,13 +46,18 @@ class QuestionAnswerKeyboard:
     """Question answer keyboard with options A, B, C, D."""
     
     @staticmethod
-    def get_keyboard(round_question_id: int, options: Dict[str, str]) -> InlineKeyboardMarkup:
+    def get_keyboard(
+        round_question_id: int,
+        options: Dict[str, str],
+        leave_callback_data: Optional[str] = None
+    ) -> InlineKeyboardMarkup:
         """
         Get question answer keyboard.
         
         Args:
             round_question_id: Round question ID
             options: Dict mapping option letters to text
+            leave_callback_data: Optional callback data for leave-game button
         """
         keyboard = []
         for option in ['A', 'B', 'C', 'D']:
@@ -63,6 +68,15 @@ class QuestionAnswerKeyboard:
                         callback_data=f"answer:{round_question_id}:{option}"
                     )
                 ])
+        
+        if leave_callback_data:
+            keyboard.append([
+                InlineKeyboardButton(
+                    "🚪 Покинуть игру",
+                    callback_data=leave_callback_data
+                )
+            ])
+        
         return InlineKeyboardMarkup(keyboard)
 
 

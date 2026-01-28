@@ -127,23 +127,30 @@ def update_round_pause_timer(
     pause_text += f"⏱️ {remaining} сек"
     
     try:
-        logger.debug(f"Updating pause timer: remaining={remaining}, time_limit={time_limit}, user_id={user_id}, message_id={message_id}")
-        bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
-        import asyncio
-        from telegram.error import TelegramError, BadRequest
-        
-        asyncio.run(bot.edit_message_text(
-            chat_id=user_id,
-            message_id=message_id,
-            text=pause_text,
-            parse_mode="Markdown"
-        ))
-        logger.debug(f"Pause timer updated successfully: remaining={remaining}")
+        # Don't edit immediately with the same text (Telegram returns "message is not modified")
+        if remaining < time_limit:
+            logger.debug(
+                f"Updating pause timer: remaining={remaining}, time_limit={time_limit}, "
+                f"user_id={user_id}, message_id={message_id}"
+            )
+            bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
+            import asyncio
+            from telegram.error import TelegramError, BadRequest
+            
+            asyncio.run(bot.edit_message_text(
+                chat_id=user_id,
+                message_id=message_id,
+                text=pause_text,
+                parse_mode="Markdown"
+            ))
+            logger.debug(f"Pause timer updated successfully: remaining={remaining}")
     except BadRequest as e:
         # Message might have been deleted or changed - stop timer
-        if "message to edit not found" in str(e).lower() or "message is not modified" in str(e).lower():
-            logger.debug(f"Pause timer message not found or not modified for user {user_id}, stopping timer")
+        if "message to edit not found" in str(e).lower():
+            logger.debug(f"Pause timer message not found for user {user_id}, stopping timer")
             return
+        if "message is not modified" in str(e).lower():
+            logger.debug(f"Pause timer message not modified for user {user_id}, continuing timer")
         else:
             logger.warning(f"Could not update pause timer message (BadRequest): {e}", exc_info=True)
     except TelegramError as e:

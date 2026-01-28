@@ -256,6 +256,9 @@ async def callback_query_handler(update: Update, context) -> None:
         elif data.startswith("elimination:"):
             await query.answer()
             await handle_elimination_choice(update, context, data)
+        elif data.startswith("leave_game:"):
+            await query.answer()
+            await handle_leave_game(update, context, data)
         elif data.startswith("admin:"):
             await query.answer()
             await handle_admin(update, context, data)
@@ -393,6 +396,68 @@ async def handle_elimination_choice(update: Update, context, data: str) -> None:
         
         session.commit()
         logger.info(f"Player {user_id} chose {choice} for game {game_id}")
+
+
+async def handle_leave_game(update: Update, context, data: str) -> None:
+    """Handle leave-game callback (player exits and stops notifications)."""
+    from database.session import db_session
+    from database.models import GamePlayer, User
+    
+    query = update.callback_query
+    user = update.effective_user
+    
+    # Parse callback data: leave_game:123:456
+    parts = data.split(":")
+    if len(parts) != 3:
+        await query.answer("Ошибка в данных", show_alert=True)
+        return
+    
+    try:
+        game_id = int(parts[1])
+        user_id = int(parts[2])
+    except ValueError:
+        await query.answer("Ошибка: неверный ID", show_alert=True)
+        return
+    
+    with db_session() as session:
+        db_user = session.query(User).filter(User.telegram_id == user.id).first()
+        if not db_user or db_user.id != user_id:
+            await query.answer("Ошибка: неверный пользователь", show_alert=True)
+            return
+        
+        game_player = session.query(GamePlayer).filter(
+            GamePlayer.game_id == game_id,
+            GamePlayer.user_id == user_id
+        ).first()
+        
+        if not game_player:
+            await query.answer("Ошибка: игрок не найден", show_alert=True)
+            return
+        
+        if game_player.left_game:
+            await query.answer("Вы уже вышли из игры", show_alert=False)
+            return
+        
+        game_player.left_game = True
+        game_player.is_spectator = False
+        if not game_player.is_eliminated:
+            game_player.is_eliminated = True
+        
+        session.commit()
+    
+    # Try to remove inline keyboard to prevent further answers
+    try:
+        await query.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    
+    from bot.keyboards import MainMenuKeyboard
+    await query.message.reply_text(
+        "👋 Вы вышли из игры.\n\n"
+        "Вы больше не будете получать уведомления об этой игре.",
+        reply_markup=MainMenuKeyboard.get_keyboard()
+    )
+    logger.info(f"Player {user_id} left game {game_id} via leave button")
 
 
 async def handle_training_difficulty(update: Update, context, data: str) -> None:

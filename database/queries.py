@@ -182,9 +182,19 @@ class QuestionQueries:
             .subquery()
         )
         
+        # Additional safety: exclude questions already present in any round for this game
+        existing_round_ids_subquery = (
+            select(RoundQuestion.question_id)
+            .select_from(RoundQuestion)
+            .join(Round, Round.id == RoundQuestion.round_id)
+            .where(Round.game_id == game_id)
+            .subquery()
+        )
+        
         query = session.query(Question).filter(
             and_(
                 Question.id.notin_(select(used_ids_subquery.c.question_id)),
+                Question.id.notin_(select(existing_round_ids_subquery.c.question_id)),
                 Question.is_approved == True
             )
         )
