@@ -502,9 +502,10 @@ def cleanup_questions(dry_run: bool = False) -> dict:
                         f"  D: '{original_options['d']}' -> '{cleaned_d}'"
                     )
                 
-                # Очищаем текст вопроса от номера
+                # Очищаем текст вопроса от артефактов Telegram и номера
                 original_text = question.question_text or ''
-                cleaned_text = clean_question_number(original_text)
+                cleaned_text = clean_telegram_artifact(original_text)
+                cleaned_text = clean_question_number(cleaned_text)
                 
                 if cleaned_text != original_text:
                     updated = True
