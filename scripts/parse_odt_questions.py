@@ -268,10 +268,19 @@ def main():
         print(f"[FILE] Сохранено в файл: {output_file}")
         print(f"\nПримеры вопросов:")
         for i, q in enumerate(import_format[:3], 1):
-            print(f"\n{i}. {q['question_text'][:80]}...")
-            print(f"   A) {q['option_a'][:50]}...")
-            print(f"   B) {q['option_b'][:50]}...")
-            print(f"   Правильный ответ: {q['correct_option']}")
+            try:
+                # Безопасный вывод с обработкой Unicode
+                q_text = q['question_text'][:80].encode('utf-8', errors='replace').decode('utf-8')
+                opt_a = q['option_a'][:50].encode('utf-8', errors='replace').decode('utf-8')
+                opt_b = q['option_b'][:50].encode('utf-8', errors='replace').decode('utf-8')
+                print(f"\n{i}. {q_text}...")
+                print(f"   A) {opt_a}...")
+                print(f"   B) {opt_b}...")
+                print(f"   Правильный ответ: {q['correct_option']}")
+            except Exception as e:
+                # Если все равно ошибка, просто пропускаем примеры
+                print(f"\n{i}. [Вопрос {i}]")
+                print(f"   Правильный ответ: {q['correct_option']}")
         
         print(f"\n[INFO] Для импорта в базу данных выполните:")
         print(f"python scripts/import_questions_from_json.py {output_file}")
