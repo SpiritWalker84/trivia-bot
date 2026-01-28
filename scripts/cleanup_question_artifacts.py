@@ -411,29 +411,29 @@ def cleanup_questions(dry_run: bool = False) -> dict:
                     'd': question.option_d
                 }
                 
-                # Сначала проверяем, были ли удалены буквы A), B), C), D) из оригинальных вариантов
-                # (до очистки артефактов Telegram, чтобы не пропустить)
-                # Считаем отдельно для каждого варианта ответа
-                if clean_option_letter_prefix(original_options['a']) != original_options['a']:
-                    stats["option_letters_removed"] += 1
-                if clean_option_letter_prefix(original_options['b']) != original_options['b']:
-                    stats["option_letters_removed"] += 1
-                if clean_option_letter_prefix(original_options['c']) != original_options['c']:
-                    stats["option_letters_removed"] += 1
-                if clean_option_letter_prefix(original_options['d']) != original_options['d']:
-                    stats["option_letters_removed"] += 1
+                # Сначала очищаем от артефактов Telegram
+                after_telegram_a = clean_telegram_artifact(question.option_a or '')
+                after_telegram_b = clean_telegram_artifact(question.option_b or '')
+                after_telegram_c = clean_telegram_artifact(question.option_c or '')
+                after_telegram_d = clean_telegram_artifact(question.option_d or '')
                 
-                # Сначала очищаем от артефактов Telegram, затем убираем буквы A), B), C), D)
-                cleaned_a = clean_telegram_artifact(question.option_a or '')
-                cleaned_b = clean_telegram_artifact(question.option_b or '')
-                cleaned_c = clean_telegram_artifact(question.option_c or '')
-                cleaned_d = clean_telegram_artifact(question.option_d or '')
+                # Проверяем, были ли удалены буквы A), B), C), D) после очистки артефактов Telegram
+                # (проверяем на вариантах после очистки Telegram, но до удаления букв)
+                # Считаем отдельно для каждого варианта ответа
+                if clean_option_letter_prefix(after_telegram_a) != after_telegram_a:
+                    stats["option_letters_removed"] += 1
+                if clean_option_letter_prefix(after_telegram_b) != after_telegram_b:
+                    stats["option_letters_removed"] += 1
+                if clean_option_letter_prefix(after_telegram_c) != after_telegram_c:
+                    stats["option_letters_removed"] += 1
+                if clean_option_letter_prefix(after_telegram_d) != after_telegram_d:
+                    stats["option_letters_removed"] += 1
                 
                 # Убираем буквы A), B), C), D) из начала вариантов ответов
-                cleaned_a = clean_option_letter_prefix(cleaned_a)
-                cleaned_b = clean_option_letter_prefix(cleaned_b)
-                cleaned_c = clean_option_letter_prefix(cleaned_c)
-                cleaned_d = clean_option_letter_prefix(cleaned_d)
+                cleaned_a = clean_option_letter_prefix(after_telegram_a)
+                cleaned_b = clean_option_letter_prefix(after_telegram_b)
+                cleaned_c = clean_option_letter_prefix(after_telegram_c)
+                cleaned_d = clean_option_letter_prefix(after_telegram_d)
                 
                 # Проверяем, были ли изменения в вариантах ответов
                 options_changed = (
