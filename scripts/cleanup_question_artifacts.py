@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 def clean_telegram_artifact(text: str) -> str:
     """
     Удаляет артефакты копирования из Telegram вида "ChatGPT & DeepSeek [28.01.2026 11:11]"
+    и "ChatGPT & DeepSeek ♥️"
     
     Args:
         text: Текст для очистки
@@ -36,7 +37,8 @@ def clean_telegram_artifact(text: str) -> str:
     # Паттерны для удаления артефактов копирования из Telegram:
     # 1. "ChatGPT & DeepSeek [дата время]" - может быть в любом месте строки
     # 2. "[дата время]" в конце строки (артефакт копирования)
-    # 3. Различные варианты форматирования даты
+    # 3. "ChatGPT & DeepSeek ♥️" или с другими эмодзи
+    # 4. Различные варианты форматирования даты
     
     patterns = [
         # ChatGPT & DeepSeek [28.01.2026 11:11] или ChatGPT&DeepSeek [28.01.2026 11:11]
@@ -47,6 +49,12 @@ def clean_telegram_artifact(text: str) -> str:
         r'ChatGPT\s*[&]\s*DeepSeek\s*\[.*?\]',
         # Любой текст в квадратных скобках с датой в конце строки
         r'\s*\[.*?\d{1,2}\.\d{1,2}\.\d{4}.*?\]\s*$',
+        # ChatGPT & DeepSeek с эмодзи (♥️, ❤️, и т.д.) - может быть в любом месте
+        r'ChatGPT\s*&\s*DeepSeek\s*[♥❤💚💙💜💛🧡🤍🖤🤎\s]*',
+        # ChatGPT & DeepSeek в конце строки (без даты, но с эмодзи или без)
+        r'\s*ChatGPT\s*&\s*DeepSeek\s*[^\w\s]*\s*$',
+        # ChatGPT & DeepSeek в конце строки с любыми символами после
+        r'\s*ChatGPT\s*&\s*DeepSeek.*?$',
     ]
     
     cleaned = text
@@ -55,6 +63,37 @@ def clean_telegram_artifact(text: str) -> str:
     
     # Убираем лишние пробелы в конце и начале
     cleaned = cleaned.strip()
+    
+    return cleaned
+
+
+def clean_option_letter_prefix(text: str) -> str:
+    """
+    Убирает буквы A), B), C), D) или А), Б), В), Г) из начала варианта ответа.
+    
+    Args:
+        text: Текст варианта ответа
+        
+    Returns:
+        Очищенный текст
+    """
+    if not text:
+        return text
+    
+    # Паттерн для удаления букв A), B), C), D) или А), Б), В), Г) в начале строки
+    # Может быть с точкой или скобкой, с пробелом или без после
+    # Примеры: "A)", "A. ", "А)", "Б. " и т.д.
+    patterns = [
+        r'^[A-DА-Г][\.\)]\s*',  # A), A., А), А.
+        r'^[A-DА-Г]\s+',  # A , А  (с пробелом)
+    ]
+    
+    cleaned = text
+    for pattern in patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+    
+    # Убираем лишние пробелы в начале
+    cleaned = cleaned.lstrip()
     
     return cleaned
 
@@ -95,6 +134,7 @@ def cleanup_questions(dry_run: bool = False) -> dict:
         "total_checked": 0,
         "questions_updated": 0,
         "options_cleaned": 0,
+        "option_letters_removed": 0,
         "question_numbers_removed": 0,
         "errors": 0
     }
@@ -118,17 +158,39 @@ def cleanup_questions(dry_run: bool = False) -> dict:
                     'd': question.option_d
                 }
                 
+                # Сначала очищаем от артефактов Telegram, затем убираем буквы A), B), C), D)
                 cleaned_a = clean_telegram_artifact(question.option_a or '')
                 cleaned_b = clean_telegram_artifact(question.option_b or '')
                 cleaned_c = clean_telegram_artifact(question.option_c or '')
                 cleaned_d = clean_telegram_artifact(question.option_d or '')
                 
-                if (cleaned_a != original_options['a'] or 
+                # Убираем буквы A), B), C), D) из начала вариантов ответов
+                cleaned_a = clean_option_letter_prefix(cleaned_a)
+                cleaned_b = clean_option_letter_prefix(cleaned_b)
+                cleaned_c = clean_option_letter_prefix(cleaned_c)
+                cleaned_d = clean_option_letter_prefix(cleaned_d)
+                
+                # Проверяем, были ли изменения в вариантах ответов
+                options_changed = (
+                    cleaned_a != original_options['a'] or 
                     cleaned_b != original_options['b'] or 
                     cleaned_c != original_options['c'] or 
-                    cleaned_d != original_options['d']):
+                    cleaned_d != original_options['d']
+                )
+                
+                if options_changed:
                     updated = True
                     stats["options_cleaned"] += 1
+                    
+                    # Проверяем, были ли удалены буквы A), B), C), D) из оригинальных вариантов
+                    letters_removed = (
+                        clean_option_letter_prefix(original_options['a']) != original_options['a'] or
+                        clean_option_letter_prefix(original_options['b']) != original_options['b'] or
+                        clean_option_letter_prefix(original_options['c']) != original_options['c'] or
+                        clean_option_letter_prefix(original_options['d']) != original_options['d']
+                    )
+                    if letters_removed:
+                        stats["option_letters_removed"] += 1
                     
                     if not dry_run:
                         question.option_a = cleaned_a
@@ -217,6 +279,7 @@ def main():
         print(f"Всего проверено вопросов: {stats['total_checked']}")
         print(f"Вопросов обновлено: {stats['questions_updated']}")
         print(f"Вариантов ответов очищено: {stats['options_cleaned']}")
+        print(f"Букв A), B), C), D) удалено: {stats['option_letters_removed']}")
         print(f"Номеров удалено из вопросов: {stats['question_numbers_removed']}")
         print(f"Ошибок: {stats['errors']}")
         print("="*60)
