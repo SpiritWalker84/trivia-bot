@@ -205,12 +205,16 @@ def collect_answers(game_id: int, round_id: int, round_question_id: int) -> None
                 bot = Bot(token=config.config.TELEGRAM_BOT_TOKEN)
                 for user_id in timed_out_user_ids:
                     try:
-                        asyncio.run(
+                        # Use a dedicated event loop to avoid "event loop is closed" issues in workers
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        loop.run_until_complete(
                             bot.send_message(
                                 chat_id=user_id,
                                 text=f"⏰ Время вышло. Правильный ответ: {correct_option_display}"
                             )
                         )
+                        loop.close()
                     except Exception as send_error:
                         logger.warning(
                             f"Failed to send timeout feedback to user {user_id}: {send_error}"
