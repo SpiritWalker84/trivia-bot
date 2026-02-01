@@ -542,10 +542,81 @@ async def handle_training_difficulty(update: Update, context, data: str) -> None
         )
 
 
+async def admin_command(update: Update, context) -> None:
+    """Handle /admin command - show admin panel."""
+    user = update.effective_user
+    
+    # Check if user is admin
+    if user.id not in config.config.TELEGRAM_ADMIN_IDS:
+        await update.message.reply_text("❌ У вас нет прав администратора.")
+        return
+    
+    from bot.keyboards import AdminKeyboard
+    
+    admin_text = (
+        "🔧 АДМИН-ПАНЕЛЬ\n\n"
+        "Выберите действие:"
+    )
+    await update.message.reply_text(
+        admin_text,
+        reply_markup=AdminKeyboard.get_main_keyboard()
+    )
+
+
 async def handle_admin(update: Update, context, data: str) -> None:
     """Handle admin callbacks."""
-    # TODO: Implement admin handlers
-    await update.callback_query.answer("Админ-панель (в разработке)")
+    query = update.callback_query
+    user = update.effective_user
+    
+    # Check if user is admin
+    if user.id not in config.config.TELEGRAM_ADMIN_IDS:
+        await query.answer("❌ У вас нет прав администратора.", show_alert=True)
+        return
+    
+    if data == "admin:stop_all_games":
+        await handle_stop_all_games(update, context)
+    elif data == "admin:games":
+        await query.answer("Раздел 'Игры' (в разработке)")
+    elif data == "admin:users":
+        await query.answer("Раздел 'Пользователи' (в разработке)")
+    elif data == "admin:questions":
+        await query.answer("Раздел 'Вопросы' (в разработке)")
+    elif data == "admin:stats":
+        await query.answer("Раздел 'Статистика' (в разработке)")
+    else:
+        await query.answer("Неизвестная команда", show_alert=True)
+
+
+async def handle_stop_all_games(update: Update, context) -> None:
+    """Handle stop all games admin action."""
+    query = update.callback_query
+    
+    # Show confirmation
+    await query.answer("Останавливаю все игры...")
+    
+    try:
+        # Import cleanup function
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        from scripts.cleanup_games import cleanup_all_games
+        
+        # Run cleanup in executor to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, cleanup_all_games)
+        
+        await query.edit_message_text(
+            "✅ Все активные игры остановлены.\n"
+            "Все Celery задачи отменены.\n"
+            "Redis очереди очищены."
+        )
+        
+    except Exception as e:
+        logger.error(f"Error stopping all games: {e}", exc_info=True)
+        await query.edit_message_text(
+            f"❌ Ошибка при остановке игр:\n{str(e)}"
+        )
 
 
 def main() -> None:
@@ -563,6 +634,7 @@ def main() -> None:
     # Register handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("admin", admin_command))
     
     # Handle user_shared (friends selection) - must be before TEXT handler
     # This handler catches ALL messages to check for user_shared attribute

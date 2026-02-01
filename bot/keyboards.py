@@ -133,6 +133,9 @@ class AdminKeyboard:
             [
                 InlineKeyboardButton("❓ Вопросы", callback_data="admin:questions"),
                 InlineKeyboardButton("📊 Статистика", callback_data="admin:stats")
+            ],
+            [
+                InlineKeyboardButton("🛑 Остановить все игры", callback_data="admin:stop_all_games")
             ]
         ]
         return InlineKeyboardMarkup(keyboard)
