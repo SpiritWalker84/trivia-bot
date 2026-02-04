@@ -97,6 +97,9 @@ class Config:
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     DEBUG: bool = ENVIRONMENT.lower() == "development"
     
+    # Web Interface URL
+    WEB_URL: str = os.getenv("WEB_URL", "http://193.42.127.176")
+    
     # Cache TTLs (in seconds)
     CACHE_USER_PROFILE_TTL: int = int(os.getenv("CACHE_USER_PROFILE_TTL", "600"))
     CACHE_RATING_TOP100_TTL: int = int(os.getenv("CACHE_RATING_TOP100_TTL", "600"))

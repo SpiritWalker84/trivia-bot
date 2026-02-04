@@ -15,16 +15,17 @@ logger = get_logger(__name__)
 
 
 async def start_command(update: Update, context) -> None:
-    """Handle /start command."""
+    """Handle /start command - opens web interface."""
     from database.session import db_session
     from database.queries import UserQueries
-    from bot.keyboards import MainMenuKeyboard
-    from bot.private_game import handle_private_game_invite, handle_private_game_callback
+    from bot.private_game import handle_private_game_invite
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     
     user = update.effective_user
     logger.info(f"User {user.id} ({user.username}) started the bot")
     
     # Check if there's a parameter (e.g., /start private_123)
+    # Keep this for backward compatibility with private game invites
     args = context.args
     if args and len(args) > 0:
         param = args[0]
@@ -45,19 +46,23 @@ async def start_command(update: Update, context) -> None:
             full_name=f"{user.first_name} {user.last_name or ''}".strip()
         )
     
+    # URL веб-интерфейса с telegram_id
+    web_url_with_params = f"{config.config.WEB_URL}/?telegram_id={user.id}"
+    
+    # Отправляем кнопку для открытия веб-интерфейса
+    keyboard = [
+        [InlineKeyboardButton("🎮 Начать игру", url=web_url_with_params)]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     welcome_text = (
-        "🎮 Добро пожаловать в Brain Survivor!\n\n"
-        "Это викторина на выбывание:\n"
-        "• 10 участников\n"
-        f"• {config.config.ROUNDS_PER_GAME} раундов по {config.config.QUESTIONS_PER_ROUND} вопросов\n"
-        "• После каждого раунда выбывает один игрок\n"
-        "\n"
-        "Выберите режим игры:"
+        "🎮 Добро пожаловать в Brain Survivor! 🧠\n\n"
+        "Нажмите кнопку, чтобы открыть игру в браузере."
     )
     
     await update.message.reply_text(
         welcome_text,
-        reply_markup=MainMenuKeyboard.get_keyboard()
+        reply_markup=reply_markup
     )
 
 
